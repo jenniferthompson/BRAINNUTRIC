@@ -16,10 +16,12 @@
 % \begin{landscape}
 \maketitle
 \tableofcontents
+\listoftables
+\listoffigures
 \clearpage
 
 <<setup, include=FALSE, results='hide', cache=FALSE>>=
-opts_chunk$set(echo=FALSE, warning = FALSE, message = FALSE, cache = FALSE, error = FALSE, results='hide')
+opts_chunk$set(echo=FALSE, warning = FALSE, message = FALSE, cache = FALSE, error = FALSE, results='hide', fig.width=7, fig.height=(7/1.618), fig.align='center', fig.pos='!h')
 options(replace.assign = TRUE, width = 90)
 
 library(devtools)
@@ -31,6 +33,7 @@ library(caTools)
 library(ggplot2)
 library(dplyr)
 library(tidyr)
+library(GGally) ## for ggsurv()
 
 if(Sys.info()['sysname'] == 'Darwin'){
   load('/Volumes/thomps23/ICUDelirium/BRAINICU/braindata.Rdata')
@@ -121,6 +124,23 @@ disability outcomes at each time point
   \item total of \Sexpr{n.lt} unique patients
   \end{itemize}
 \end{itemize}
+
+Table \ref{table:table1} describes baseline, in-hospital, and followup characteristics of all three
+cohorts. Figure \ref{fig:km365} shows a Kaplan-Meier curve representing mortality over the year
+following enrollment for all patients.
+
+<<km365, results='asis', fig.cap='Kaplan-Meier Curve, Mortality up to 365 Days after Enrollment'>>=
+## -- Kaplan-Meier curve for 365-day mortality -----------------------------------------------------
+## Create Surv object
+allmort.Surv <-
+  with(brain.oneobs, Surv(time = days.deathlast.365, event = as.numeric(died.brain.365)))
+
+## Create plot
+ggsurv(survfit(allmort.Surv ~ 1)) +
+  scale_x_continuous(name = 'Days since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
+  scale_y_continuous('Probability Alive')
+
+@
 
 <<desctables>>=
 desc.vars <- c('age.enroll', 'sex.pp', 'race.pp', 'edu', 'charlson.score', 'num.comorbid',
