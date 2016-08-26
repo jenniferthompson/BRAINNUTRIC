@@ -95,6 +95,17 @@ fu.outcomes <- brain.fu %>%
 
 brain.oneobs <- merge(brain.oneobs, fu.outcomes, by = 'id', all = TRUE)
 
+## -- Indicators for whether pt nutritionally at risk (NUTRIC with IL6 >=6, without, >=5) ----------
+brain.oneobs$nutric.atrisk.il6 <- with(brain.oneobs, factor(ifelse(is.na(nutric.il6), NA,
+                                                            ifelse(nutric.il6 >= 6, 2, 1)),
+                                                            levels = 1:2,
+                                                            labels = c('No', 'Yes')))
+
+brain.oneobs$nutric.atrisk.noil6 <- with(brain.oneobs, factor(ifelse(is.na(nutric.noil6), NA,
+                                                              ifelse(nutric.noil6 >= 5, 2, 1)),
+                                                              levels = 1:2,
+                                                              labels = c('No', 'Yes')))
+
 @
 
 There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. For
@@ -114,7 +125,8 @@ disability outcomes at each time point
 <<desctables>>=
 desc.vars <- c('age.enroll', 'sex.pp', 'race.pp', 'edu', 'charlson.score', 'num.comorbid',
                'iqcode.score.e', 'stroke.risk', 'adl.e', 'faq.e', 'frailty', 'icu.type',
-               'num.apache', 'sofa', 'mean.benz.icu', 'mean.op.new.icu', 'mean.prop.icu',
+               'num.apache', 'sofa', 'nutric.il6', 'nutric.atrisk.il6', 'nutric.noil6',
+               'nutric.atrisk.noil6', 'mean.benz.icu', 'mean.op.new.icu', 'mean.prop.icu',
                'mean.dex.icu', 'mean.hal.icu', 'ever.vent.s', 'vent.los.tot.eo', 'ever.del.s.imp',
                'del.s.imp.eo', 'ever.coma.s.imp', 'coma.s.imp.eo', 'died.inhosp', 'hospdis.loc',
                'rbans.global.3', 'rbans.global.12', 'trail.b.3', 'trail.b.12', 'adl.3', 'adl.12',
@@ -147,6 +159,8 @@ label(desc.data.all$race.pp) <- 'Race'
 label(desc.data.all$num.comorbid) <- 'Number of comorbidities'
 label(desc.data.all$frailty) <- 'CSHA Frailty, enrollment'
 label(desc.data.all$icu.type) <- 'ICU type'
+label(desc.data.all$nutric.atrisk.il6) <- 'Nutritionally at risk (NUTRIC >=6)'
+label(desc.data.all$nutric.atrisk.noil6) <- 'Nutritionally at risk (mod. NUTRIC >=5)'
 label(desc.data.all$mean.benz.icu) <- 'Mean 24h benzos in ICU (midaz)'
 label(desc.data.all$mean.op.new.icu) <- 'Mean 24h opioids in ICU (fentanyl)'
 label(desc.data.all$mean.prop.icu) <- 'Mean 24h propofol in ICU'
