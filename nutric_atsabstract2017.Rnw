@@ -1,0 +1,211 @@
+%% -- Specially formatted Latex comment tells RStudio to compile PDF with knitr
+% !Rnw weave = knitr
+
+\documentclass{article}
+
+%\usepackage[margin=.5in, landscape]{geometry} %resets margins
+\usepackage[margin=.5in]{geometry} %resets margins
+\usepackage{hyperref}
+\usepackage{lscape}
+\usepackage{pdfpages}
+
+\title{NUTRIC Scores vs. Mortality, Cognitive and Functional Outcomes\\BRAIN-ICU Cohort Only, for ATS 2017 Abstract}
+\date{\today}
+\author{Jennifer Thompson, MPH; Supervisor: Rameela Chandrasekhar, PhD}
+\begin{document}
+% \begin{landscape}
+\maketitle
+\tableofcontents
+\clearpage
+
+<<setup, include=FALSE, results='hide', cache=FALSE>>=
+opts_chunk$set(echo=FALSE, warning = FALSE, message = FALSE, cache = FALSE, error = FALSE, results='hide')
+options(replace.assign = TRUE, width = 90)
+
+library(devtools)
+library(mice)
+library(MASS)
+library(pscl)
+library(rms)
+library(caTools)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+if(Sys.info()['sysname'] == 'Darwin'){
+  load('/Volumes/thomps23/ICUDelirium/BRAINICU/braindata.Rdata')
+} else{
+  load('/home/thomps23/ICUDelirium/BRAINICU/braindata.Rdata')
+}
+
+@
+
+The following analyses look for associations between NUTRIC scores at ICU admission and long-term
+outcomes, including mortality, discharge location, disability, and cognition. These initial analyses
+use only the BRAIN-ICU cohort for ATS abstract submission; MIND-ICU patients will be added later.
+
+\section{Cohort Descriptions}
+<<cohortvars>>=
+## Indicator for whether patient had at least partial followup data (any outcomes)
+brain.fu$any.outcomes <- rowSums(!is.na(brain.fu[,c('mmse.tscore', 'trail.a.tscore',
+                                                    'trail.b.tscore', 'rbans.immmemory.tscore',
+                                                    'rbans.visuo.tscore', 'rbans.language.tscore',
+                                                    'rbans.attention.tscore',
+                                                    'rbans.delayedmem.tscore', 'rbans.global.score',
+                                                    'faq.totscore', 'adl.totscore', 'sf36.pcs',
+                                                    'sf36.mcs')])) > 0
+
+## All patients with usable data
+brain.oneobs$cohort.allpts <- with(brain.oneobs, {
+  !(!is.na(studywd.amt) &
+      studywd.amt %in% c('2. W/D from Participation and All Data Collected',
+                         '4. N/A Study Staff Withdrew Patient')) })
+n.allpts <- sum(brain.oneobs$cohort.allpts)
+
+## All hospital survivors who remained in study
+brain.oneobs$cohort.survivors <- with(brain.oneobs, {
+  cohort.allpts &
+    died.inhosp == 'Alive through or withdrew during hospital stay' &
+    (is.na(studywd) | studywd == 'No') })
+n.survivors <- sum(brain.oneobs$cohort.survivors)
+
+## All patients with long-term outcomes at each time point
+brain.oneobs$cohort.3m <- with(brain.oneobs, {
+  cohort.survivors & id %in% subset(brain.fu, fu.period == '3 Month' & any.outcomes)$id })
+n.3m <- sum(brain.oneobs$cohort.3m)
+
+brain.oneobs$cohort.12m <- with(brain.oneobs, {
+  cohort.survivors & id %in% subset(brain.fu, fu.period == '12 Month' & any.outcomes)$id })
+n.12m <- sum(brain.oneobs$cohort.12m)
+
+## Total number of patients with any long-term outcomes
+brain.oneobs$cohort.lt <- with(brain.oneobs, cohort.3m | cohort.12m)
+n.lt <- sum(brain.oneobs$cohort.lt)
+
+## Add followup variables to main data set
+fu.outcomes <- brain.fu %>%
+  filter(fu.period %in% c('3 Month', '12 Month')) %>%
+  mutate(faq.rdscore = round(faq.totscore)) %>%
+  separate(fu.period, into = c('month', 'toss')) %>%
+  dplyr::select(id, month, rbans.global.score, trail.b.tscore, faq.rdscore, adl.totscore) %>%
+  gather(key = test, value = score, rbans.global.score:adl.totscore) %>%
+  mutate(test.time = paste(gsub('\\.[a-z]*score$', '', test), month, sep = '.')) %>%
+  dplyr::select(id, test.time, score) %>%
+  spread(key = test.time, value = score)
+
+brain.oneobs <- merge(brain.oneobs, fu.outcomes, by = 'id', all = TRUE)
+
+@
+
+There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. For
+these analyses, the following subsets of patients will be included:
+\begin{itemize}
+\item In-hospital mortality: all \Sexpr{n.allpts} patients
+\item Discharge location and long-term mortality: \Sexpr{n.survivors} hospital survivors
+\item Long-term cognitive and disability outcomes: patients with at least partial cognitive and/or
+disability outcomes at each time point
+  \begin{itemize}
+  \item \Sexpr{n.3m} at 3 months
+  \item \Sexpr{n.12m} at 12 months
+  \item total of \Sexpr{n.lt} unique patients
+  \end{itemize}
+\end{itemize}
+
+<<desctables>>=
+desc.vars <- c('age.enroll', 'sex.pp', 'race.pp', 'edu', 'charlson.score', 'num.comorbid',
+               'iqcode.score.e', 'stroke.risk', 'adl.e', 'faq.e', 'frailty', 'icu.type',
+               'num.apache', 'sofa', 'mean.benz.icu', 'mean.op.new.icu', 'mean.prop.icu',
+               'mean.dex.icu', 'mean.hal.icu', 'ever.vent.s', 'vent.los.tot.eo', 'ever.del.s.imp',
+               'del.s.imp.eo', 'ever.coma.s.imp', 'coma.s.imp.eo', 'died.inhosp', 'hospdis.loc',
+               'rbans.global.3', 'rbans.global.12', 'trail.b.3', 'trail.b.12', 'adl.3', 'adl.12',
+               'faq.3', 'faq.12')
+
+desc.data.all <- brain.oneobs[brain.oneobs$cohort.allpts, c('id', desc.vars)]
+desc.data.all$cohort <- 1
+
+desc.data.surv <- brain.oneobs[brain.oneobs$cohort.survivors, c('id', desc.vars)]
+desc.data.surv$cohort <- 2
+
+desc.data.lt <- brain.oneobs[brain.oneobs$cohort.lt, c('id', desc.vars)]
+desc.data.lt$cohort <- 3
+
+desc.data.all <- rbind(desc.data.all, desc.data.surv, desc.data.lt)
+desc.data.all$cohort <- factor(desc.data.all$cohort,
+                               levels = 1:3,
+                               labels = c('Enrolled Patients',
+                                          'Hospital Survivors',
+                                          'Long-Term Outcomes'))
+
+## Shorten factor levels
+levels(desc.data.all$ever.vent.s) <- levels(desc.data.all$ever.del.s.imp) <-
+  levels(desc.data.all$ever.coma.s.imp) <- c('Never', 'Yes')
+levels(desc.data.all$died.inhosp) <- c('Survived or w/d in hospital', 'Died in hospital')
+
+## Add/shorten labels
+label(desc.data.all$sex.pp) <- 'Sex'
+label(desc.data.all$race.pp) <- 'Race'
+label(desc.data.all$num.comorbid) <- 'Number of comorbidities'
+label(desc.data.all$frailty) <- 'CSHA Frailty, enrollment'
+label(desc.data.all$icu.type) <- 'ICU type'
+label(desc.data.all$mean.benz.icu) <- 'Mean 24h benzos in ICU (midaz)'
+label(desc.data.all$mean.op.new.icu) <- 'Mean 24h opioids in ICU (fentanyl)'
+label(desc.data.all$mean.prop.icu) <- 'Mean 24h propofol in ICU'
+label(desc.data.all$mean.dex.icu) <- 'Mean 24h dex in ICU'
+label(desc.data.all$mean.hal.icu) <- 'Mean 24h haldol in ICU'
+label(desc.data.all$ever.vent.s) <- 'On MV during study period'
+label(desc.data.all$ever.del.s.imp) <- 'Delirious during study period'
+label(desc.data.all$del.s.imp.eo) <- 'Days delirium among exposed'
+label(desc.data.all$ever.coma.s.imp) <- 'Comatose during study period'
+label(desc.data.all$coma.s.imp.eo) <- 'Days coma among exposed'
+label(desc.data.all$hospdis.loc) <- 'Discharge location'
+label(desc.data.all$died.inhosp) <- 'Died in hospital'
+label(desc.data.all$rbans.global.3) <- 'RBANS global, 3m'
+label(desc.data.all$rbans.global.12) <- 'RBANS global, 12m'
+label(desc.data.all$trail.b.3) <- 'Trails B, 3m'
+label(desc.data.all$trail.b.12) <- 'Trails B, 12m'
+label(desc.data.all$adl.3) <- 'Katz ADL, 3m'
+label(desc.data.all$adl.12) <- 'Katz ADL, 12m'
+label(desc.data.all$faq.3) <- 'FAQ, 3m'
+label(desc.data.all$faq.12) <- 'FAQ, 12m'
+
+@
+
+<<printdescstats, results = 'asis'>>=
+latex(summaryM(formula(paste(paste(desc.vars, collapse = ' + '), '~ cohort')),
+               data = desc.data.all),
+      file = '',
+      digits = 2,
+      caption = 'Descriptive Statistics for Each Cohort',
+      caption.lot = 'Descriptive Statistics for Each Cohort',
+      label = 'table:table1',
+      prn = FALSE,
+      what = '%',
+      npct = 'both',
+      exclude1 = FALSE,
+      size = 'footnotesize',
+      prmsd = TRUE)
+
+@
+
+% \end{landscape}
+\clearpage
+\section{Code Used for Analysis}
+<<all-code, ref.label=all_labels(), echo = TRUE, eval = FALSE>>=
+@
+
+\clearpage
+\section{Technical Details}
+All analyses were produced using \Sexpr{session_info()$platform$version}, along with the
+following attached add-on packages.
+
+<<printpkgs, results='asis'>>=
+latex(session_info()$packages[session_info()$packages[,2] == '*', -2], file = '',
+      where = '!h',
+      rowname = NULL,
+      caption = 'List of R Packages Loaded for This Analysis',
+      col.just = c('l', 'r', 'r', 'l'),
+      colheads = capitalize(names(session_info()$packages)[c(1, 3:ncol(session_info()$packages))]))
+
+@
+
+\end{document}
