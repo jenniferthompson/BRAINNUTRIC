@@ -276,6 +276,47 @@ allowed to have a nonlinear relationship with each outcome, using restricted cub
   \end{itemize}
 \end{itemize}
 
+<<modelsetup>>=
+## Create numeric version of baseline frailty
+brain.oneobs$frailty.num <- as.numeric(gsub('\\..*$', '', brain.oneobs$frailty))
+
+## -- Long-term cognitive and disability outcomes --------------------------------------------------
+## List of model covariates for long-term outcomes
+lt.covars <- c('edu', 'frailty.num', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e',
+               'mean.modsofa.icu', 'icudays.sevseptic.s', 'del.s.imp', 'coma.s.imp',
+               'vent.los.tot.s')
+
+## List of variable prefixes for long-term outcomes
+lt.outcomes <- c('adl', 'faq', 'rbans.global', 'trail.b', 'sf36.mcs', 'sf36.pcs')
+
+## Create data sets for each model set: two time points, using NUTRIC with/without IL-6
+modeldata.il6.3 <- brain.oneobs[brain.oneobs$cohort.3m,
+                                c(lt.covars, 'nutric.il6', paste(lt.outcomes, 3, sep = '.'))]
+
+modeldata.il6.12 <- brain.oneobs[brain.oneobs$cohort.12m,
+                                 c(lt.covars, 'nutric.il6', paste(lt.outcomes, 12, sep = '.'))]
+
+modeldata.noil6.3 <- brain.oneobs[brain.oneobs$cohort.3m,
+                                  c(lt.covars, 'nutric.noil6', paste(lt.outcomes, 3, sep = '.'))]
+
+modeldata.noil6.12 <- brain.oneobs[brain.oneobs$cohort.12m,
+                                   c(lt.covars, 'nutric.noil6', paste(lt.outcomes, 12, sep = '.'))]
+
+## Create mice objects for imputation
+mice.il6.3 <- mice(data = modeldata.il6.3, m = 10, visitSequence = 'monotone', seed = 56)
+mice.il6.12 <- mice(data = modeldata.il6.12, m = 10, visitSequence = 'monotone', seed = 56)
+mice.noil6.3 <- mice(data = modeldata.noil6.3, m = 10, visitSequence = 'monotone', seed = 56)
+mice.noil6.12 <- mice(data = modeldata.noil6.12, m = 10, visitSequence = 'monotone', seed = 56)
+
+@
+  
+  
+
+
+
+
+
+
 % \end{landscape}
 \clearpage
 \section{Code Used for Analysis}
