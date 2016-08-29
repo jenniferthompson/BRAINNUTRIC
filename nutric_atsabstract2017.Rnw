@@ -8,6 +8,7 @@
 \usepackage{hyperref}
 \usepackage{lscape}
 \usepackage{pdfpages}
+\usepackage[section]{placeins}
 
 \title{NUTRIC Scores vs. Mortality, Cognitive and Functional Outcomes\\BRAIN-ICU Cohort Only, for ATS 2017 Abstract}
 \date{\today}
@@ -90,8 +91,9 @@ fu.outcomes <- brain.fu %>%
   filter(fu.period %in% c('3 Month', '12 Month')) %>%
   mutate(faq.rdscore = round(faq.totscore)) %>%
   separate(fu.period, into = c('month', 'toss')) %>%
-  dplyr::select(id, month, rbans.global.score, trail.b.tscore, faq.rdscore, adl.totscore) %>%
-  gather(key = test, value = score, rbans.global.score:adl.totscore) %>%
+  dplyr::select(id, month, rbans.global.score, trail.b.tscore, faq.rdscore, adl.totscore,
+                sf36.pcs, sf36.mcs) %>%
+  gather(key = test, value = score, rbans.global.score:sf36.mcs) %>%
   mutate(test.time = paste(gsub('\\.[a-z]*score$', '', test), month, sep = '.')) %>%
   dplyr::select(id, test.time, score) %>%
   spread(key = test.time, value = score)
@@ -125,9 +127,9 @@ disability outcomes at each time point
   \end{itemize}
 \end{itemize}
 
-Table \ref{table:table1} describes baseline, in-hospital, and followup characteristics of all three
-cohorts. Figure \ref{fig:km365} shows a Kaplan-Meier curve representing mortality over the year
-following enrollment for all patients.
+Tables \ref{table:descinhosp} and \ref{table:desclt} describe baseline, in-hospital, and followup
+characteristics of all three cohorts. Figure \ref{fig:km365} shows a Kaplan-Meier curve representing
+mortality over the year following enrollment for all patients.
 
 <<km365, results='asis', fig.cap='Kaplan-Meier Curve, Mortality up to 365 Days after Enrollment'>>=
 ## -- Kaplan-Meier curve for 365-day mortality -----------------------------------------------------
@@ -147,18 +149,18 @@ desc.vars <- c('age.enroll', 'sex.pp', 'race.pp', 'edu', 'charlson.score', 'num.
                'iqcode.score.e', 'stroke.risk', 'adl.e', 'faq.e', 'frailty', 'icu.type',
                'num.apache', 'sofa', 'nutric.il6', 'nutric.atrisk.il6', 'nutric.noil6',
                'nutric.atrisk.noil6', 'mean.benz.icu', 'mean.op.new.icu', 'mean.prop.icu',
-               'mean.dex.icu', 'mean.hal.icu', 'ever.vent.s', 'vent.los.tot.eo', 'ever.del.s.imp',
-               'del.s.imp.eo', 'ever.coma.s.imp', 'coma.s.imp.eo', 'died.inhosp', 'hospdis.loc',
-               'rbans.global.3', 'rbans.global.12', 'trail.b.3', 'trail.b.12', 'adl.3', 'adl.12',
-               'faq.3', 'faq.12')
+               'mean.dex.icu', 'ever.vent.s', 'vent.los.tot.eo', 'ever.del.s.imp',
+               'del.s.imp.eo', 'ever.coma.s.imp', 'coma.s.imp.eo', 'died.inhosp', 'hospdis.loc')
+lt.vars <- c('rbans.global.3', 'rbans.global.12', 'trail.b.3', 'trail.b.12', 'adl.3', 'adl.12',
+             'faq.3', 'faq.12', 'sf36.pcs.3', 'sf36.pcs.12', 'sf36.mcs.3', 'sf36.mcs.12')
 
-desc.data.all <- brain.oneobs[brain.oneobs$cohort.allpts, c('id', desc.vars)]
+desc.data.all <- brain.oneobs[brain.oneobs$cohort.allpts, c('id', desc.vars, lt.vars)]
 desc.data.all$cohort <- 1
 
-desc.data.surv <- brain.oneobs[brain.oneobs$cohort.survivors, c('id', desc.vars)]
+desc.data.surv <- brain.oneobs[brain.oneobs$cohort.survivors, c('id', desc.vars, lt.vars)]
 desc.data.surv$cohort <- 2
 
-desc.data.lt <- brain.oneobs[brain.oneobs$cohort.lt, c('id', desc.vars)]
+desc.data.lt <- brain.oneobs[brain.oneobs$cohort.lt, c('id', desc.vars, lt.vars)]
 desc.data.lt$cohort <- 3
 
 desc.data.all <- rbind(desc.data.all, desc.data.surv, desc.data.lt)
@@ -185,7 +187,6 @@ label(desc.data.all$mean.benz.icu) <- 'Mean 24h benzos in ICU (midaz)'
 label(desc.data.all$mean.op.new.icu) <- 'Mean 24h opioids in ICU (fentanyl)'
 label(desc.data.all$mean.prop.icu) <- 'Mean 24h propofol in ICU'
 label(desc.data.all$mean.dex.icu) <- 'Mean 24h dex in ICU'
-label(desc.data.all$mean.hal.icu) <- 'Mean 24h haldol in ICU'
 label(desc.data.all$ever.vent.s) <- 'On MV during study period'
 label(desc.data.all$ever.del.s.imp) <- 'Delirious during study period'
 label(desc.data.all$del.s.imp.eo) <- 'Days delirium among exposed'
@@ -201,6 +202,10 @@ label(desc.data.all$adl.3) <- 'Katz ADL, 3m'
 label(desc.data.all$adl.12) <- 'Katz ADL, 12m'
 label(desc.data.all$faq.3) <- 'FAQ, 3m'
 label(desc.data.all$faq.12) <- 'FAQ, 12m'
+label(desc.data.all$sf36.pcs.3) <- 'SF36 PCS, 3m'
+label(desc.data.all$sf36.pcs.12) <- 'SF36 PCS, 12m'
+label(desc.data.all$sf36.mcs.3) <- 'SF36 MCS, 3m'
+label(desc.data.all$sf36.mcs.12) <- 'SF36 MCS, 12m'
 
 @
 
@@ -209,9 +214,9 @@ latex(summaryM(formula(paste(paste(desc.vars, collapse = ' + '), '~ cohort')),
                data = desc.data.all),
       file = '',
       digits = 2,
-      caption = 'Descriptive Statistics for Each Cohort',
-      caption.lot = 'Descriptive Statistics for Each Cohort',
-      label = 'table:table1',
+      caption = 'Baseline and In-Hospital Characteristics for Each Cohort',
+      caption.lot = 'Baseline and In-Hospital Characteristics for Each Cohort',
+      label = 'table:descinhosp',
       prn = FALSE,
       what = '%',
       npct = 'both',
@@ -219,7 +224,57 @@ latex(summaryM(formula(paste(paste(desc.vars, collapse = ' + '), '~ cohort')),
       size = 'footnotesize',
       prmsd = TRUE)
 
+latex(summaryM(formula(paste(paste(lt.vars, collapse = ' + '), '~ 1')),
+               data = subset(desc.data.all, cohort == 'Long-Term Outcomes')),
+      file = '',
+      digits = 2,
+      where = '!h',
+      caption = 'Long-Term Outcomes', caption.lot = 'Long-Term Outcomes',
+      label = 'table:desclt',
+      prn = TRUE,
+      what = '%',
+      npct = 'both',
+      exclude1 = FALSE,
+      colheads = c('N', 'Patients with Long-Term Outcomes'),
+      prmsd = TRUE)
+
 @
+
+% \clearpage
+\section{General Methods} \label{sec:covars}
+All analyses are done using multivariable regression; specific types of regression are noted for
+each outcome.
+
+To avoid bias as much as possible, models for all long-term cognitive and disability outcomes are
+done using multiple imputation. All patients with at least partial outcomes data at that time point
+are included in the cohort; we use multiple imputation (specifically, predictive mean matching) to
+impute both missing covariates and missing outcomes for all of these patients. Amounts of missing
+data are reported for each model.
+
+All models include the following covariates (with slight changes as noted for in-hospital mortality,
+due to the potential for immortal time bias with this outcome). All continuous covariates are
+allowed to have a nonlinear relationship with each outcome, using restricted cubic splines.
+
+\begin{itemize}
+\item Baseline characteristics
+  \begin{itemize}
+  \item Years of education
+  \item CSHA frailty score
+  \item Sex
+  \item BMI
+  \item IQCODE
+  \item Katz ADL
+  \item FAQ
+  \end{itemize}
+\item In-hosptial characteristics
+  \begin{itemize}
+  \item Mean modified daily SOFA in ICU (\emph{in-hospital death: daily modified SOFA})
+  \item Duration of severe sepsis (\emph{in-hospital death: daily severe sepsis})
+  \item Duration of delirium (\emph{in-hospital death: daily delirium})
+  \item Duration of coma (\emph{in-hospital death: daily coma})
+  \item Duration of mechanical ventilation (\emph{in-hospital death: daily MV})
+  \end{itemize}
+\end{itemize}
 
 % \end{landscape}
 \clearpage
