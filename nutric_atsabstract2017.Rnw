@@ -252,27 +252,30 @@ impute both missing covariates and missing outcomes for all of these patients. A
 data are reported for each model.
 
 All models include the following covariates (with slight changes as noted for in-hospital mortality,
-due to the potential for immortal time bias with this outcome). All continuous covariates are
-allowed to have a nonlinear relationship with each outcome, using restricted cubic splines.
+due to the potential for immortal time bias with this outcome). Most continuous covariates (noted
+below) were allowed to have a nonlinear relationship with the outcomes using restricted cubic
+splines; other continuous covariates were forced to have a linear relationship, due both to limited
+sample size and to lack of variability in those covariates (eg, over 75\% of baseline ADL values
+were 0).
 
 \begin{itemize}
 \item Baseline characteristics
   \begin{itemize}
-  \item Years of education
+  \item Years of education (nonlinear)
   \item CSHA frailty score
   \item Sex
-  \item BMI
+  \item BMI (nonlinear)
   \item IQCODE
   \item Katz ADL
-  \item FAQ
+  \item FAQ (nonlinear)
   \end{itemize}
 \item In-hosptial characteristics
   \begin{itemize}
-  \item Mean modified daily SOFA in ICU (\emph{in-hospital death: daily modified SOFA})
-  \item Duration of severe sepsis (\emph{in-hospital death: daily severe sepsis})
-  \item Duration of delirium (\emph{in-hospital death: daily delirium})
-  \item Duration of coma (\emph{in-hospital death: daily coma})
-  \item Duration of mechanical ventilation (\emph{in-hospital death: daily MV})
+  \item Mean modified daily SOFA in ICU (nonlinear) (\emph{in-hospital death: daily modified SOFA})
+  \item Duration of severe sepsis (nonlinear) (\emph{in-hospital death: daily severe sepsis})
+  \item Duration of delirium (nonlinear) (\emph{in-hospital death: daily delirium})
+  \item Duration of coma (nonlinear) (\emph{in-hospital death: daily coma})
+  \item Duration of mechanical ventilation (nonlinear) (\emph{in-hospital death: daily MV})
   \end{itemize}
 \end{itemize}
 
@@ -285,6 +288,16 @@ brain.oneobs$frailty.num <- as.numeric(gsub('\\..*$', '', brain.oneobs$frailty))
 lt.covars <- c('edu', 'frailty.num', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e',
                'mean.modsofa.icu', 'icudays.sevseptic.s', 'del.s.imp', 'coma.s.imp',
                'vent.los.tot.s')
+
+## Righthand side of formula without any NUTRIC score - to use in pool.compare()
+lt.nonutric.rh <- 'rcs(edu, 3) + frailty.num + sex.pp + rcs(bmi, 3) + iqcode.score.e + adl.e + rcs(faq.e, 3) + rcs(mean.modsofa.icu, 3) + rcs(icudays.sevseptic.s, 3) + rcs(del.s.imp, 3) + rcs(coma.s.imp, 3) + rcs(vent.los.tot.s, 3)'
+
+## Righthand sides of models including NUTRIC
+lt.il6.covars <- c(lt.covars, 'nutric.il6')
+lt.il6.rh <- paste(lt.nonutric.rh, '+ rcs(nutric.il6, 3)')
+
+lt.noil6.covars <- c(lt.covars, 'nutric.noil6')
+lt.noil6.rh <- paste(lt.nonutric.rh, '+ rcs(nutric.noil6, 3)')
 
 ## List of variable prefixes for long-term outcomes
 lt.outcomes <- c('adl', 'faq', 'rbans.global', 'trail.b', 'sf36.mcs', 'sf36.pcs')
@@ -309,7 +322,27 @@ mice.noil6.3 <- mice(data = modeldata.noil6.3, m = 10, visitSequence = 'monotone
 mice.noil6.12 <- mice(data = modeldata.noil6.12, m = 10, visitSequence = 'monotone', seed = 56)
 
 @
-  
+
+\section{NUTRIC Scores vs Katz ADL}
+<<adlmodels>>=
+## -- 3-month ADL ----------------------------------------------------------------------------------
+## Fit model without NUTRIC score to use in pool.compare()
+adl.nonutric.3 <- with(mice.il6.3, glm.nb(as.formula(paste('adl.3', lt.nonutric.rh, sep = ' ~ '))))
+
+## Fit 3-month models
+adl.il6.3 <- with(mice.il6.3, glm.nb(as.formula(paste('adl.3', lt.il6.rh, sep = ' ~ '))))
+adl.noil6.3 <- with(mice.noil6.3, glm.nb(as.formula(paste('adl.3', lt.noil6.rh, sep = ' ~ '))))
+
+## -- 12-month ADL ---------------------------------------------------------------------------------
+## Fit model without NUTRIC score to use in pool.compare()
+adl.nonutric.12 <-
+  with(mice.il6.12, glm.nb(as.formula(paste('adl.12', lt.nonutric.rh, sep = ' ~ '))))
+
+## Fit 12-month models
+adl.il6.12 <- with(mice.il6.12, glm.nb(as.formula(paste('adl.12', lt.il6.rh, sep = ' ~ '))))
+adl.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('adl.12', lt.noil6.rh, sep = ' ~ '))))
+
+@
   
 
 
