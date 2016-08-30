@@ -504,6 +504,61 @@ calc.nbresults <- function(nbobj,          ## negbin model object (from glm.nb()
   }
 }
 
+## -- Step 3: Project-specific function to create data frame of predicted values for 3/12m, --------
+## -- NUTRIC with/without IL-6 ---------------------------------------------------------------------
+create.nb.preddata <- function(test = c('adl', 'faq')){
+  mod.il6.3 <- get(paste0(test, '.il6.3'))
+  mod.noil6.3 <- get(paste0(test, '.noil6.3'))
+  mod.il6.12 <- get(paste0(test, '.il6.12'))
+  mod.noil6.12 <- get(paste0(test, '.noil6.12'))
+  
+  pred.il6.3 <-
+    calc.nbresults(nbobj = mod.il6.3, designmat = lt.designmat.il6, xvar = 'nutric.il6')
+  pred.noil6.3 <-
+    calc.nbresults(nbobj = mod.noil6.3, designmat = lt.designmat.noil6, xvar = 'nutric.noil6')
+  pred.il6.12 <-
+    calc.nbresults(nbobj = mod.il6.12, designmat = lt.designmat.il6, xvar = 'nutric.il6')
+  pred.noil6.12 <-
+    calc.nbresults(nbobj = mod.noil6.12, designmat = lt.designmat.noil6, xvar = 'nutric.noil6')
+  
+  pred.il6.3$time <- pred.noil6.3$time <- 1
+  pred.il6.12$time <- pred.noil6.12$time <- 2
+  
+  pred.il6.3$version <- pred.il6.12$version <- 1
+  pred.noil6.3$version <- pred.noil6.12$version <- 2
+  
+  pred.data <- rbind(pred.il6.3, pred.il6.12, pred.noil6.3, pred.noil6.12)
+  pred.data$time.f <- factor(pred.data$time, levels = 1:2, labels = c('3 Months', '12 Months'))
+  pred.data$version.f <-
+    factor(pred.data$version, levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  
+  pred.data
+  
+}
+
+## -- Step 4: Create plot of predicted ADL/FAQ scores vs NUTRIC scores -----------------------------
+## -- Both versions and both times in a single plot ------------------------------------------------
+create.nutric.plot.nb <- function(test = c('adl', 'faq')){
+  ## Get data set of predicted values for each time/version combination
+  preddata <- create.nb.preddata(test)
+  
+  ## Set Y axis label
+  if(test == 'adl'){
+    test.ylab <- 'Katz ADL'
+  } else{
+    test.ylab <- 'FAQ'
+  }
+  
+  ## Create plot, faceted by NUTRIC version and followup time, set to Nate's preferred aesthetic
+  ggplot(data = preddata, aes(x = xvalue, y = count.pe, ymin = count.lcl, ymax = count.ucl)) +
+    facet_grid(time.f ~ version.f) +
+    scale_x_continuous(breaks = seq(0, max(adl.preddata$xvalue), 1),
+                       name = 'NUTRIC Score at ICU Admission') +
+    scale_y_continuous(name = paste('Adjusted', test.ylab, 'Score')) +
+    geom_pointrange(colour = "#003D79") +
+    theme_bw()
+  
+}
 
 @
 
@@ -525,6 +580,9 @@ adl.nonutric.12 <-
 ## Fit 12-month models
 adl.il6.12 <- with(mice.il6.12, glm.nb(as.formula(paste('adl.12', lt.il6.rh, sep = ' ~ '))))
 adl.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('adl.12', lt.noil6.rh, sep = ' ~ '))))
+
+## -- Calculate and plot predicted values ----------------------------------------------------------
+adl.nutric.plot <- create.nutric.plot.nb('adl')
 
 @
   
