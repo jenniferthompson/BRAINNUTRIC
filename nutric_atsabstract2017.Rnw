@@ -321,6 +321,111 @@ mice.il6.12 <- mice(data = modeldata.il6.12, m = 10, visitSequence = 'monotone',
 mice.noil6.3 <- mice(data = modeldata.noil6.3, m = 10, visitSequence = 'monotone', seed = 56)
 mice.noil6.12 <- mice(data = modeldata.noil6.12, m = 10, visitSequence = 'monotone', seed = 56)
 
+## -- Functions for plotting results of negative binomial models -----------------------------------
+## -- Step 1: Create design matrix for a given set of covariates -----------------------------------
+create.nutric.designmat <- function(formula.rh = c(lt.il6.rh, lt.noil6.rh),
+                                      ## which model formula's righthand side to use
+                                    xvar,                       ## Which variable should vary?
+                                    xpctlimits = c(0.05, 0.95), ## Plotting range in %iles
+                                    dataset = brain.oneobs,     ## data set to use
+                                    cohort.var = NULL){         ## variable to use to restrict data
+  
+  ## Get data set to use for all adjustment values
+  if(!is.null(cohort.var)){
+    usedata <- dataset[dataset[,cohort.var],]
+  } else{
+    usedata <- dataset
+  }
+  if(!(xvar %in% names(usedata))){ stop('xvar is not a column in dataset') }
+  
+  ## Get vector of all original model terms
+  modterms <- unlist(strsplit(formula.rh, ' + ', fixed = TRUE))
+  
+  ## Get information about each covariate:
+  ##  variable name, whether numeric and nonlinear, number of knots if applicable
+  covar.info <- do.call(rbind, lapply(modterms, FUN = function(v){
+    is.nl <- length(grep('^rcs\\(', v)) > 0
+    vname <- gsub('^rcs\\(', '', gsub(', *[0-9]+\\)', '', v))
+    is.num <- is.numeric(usedata[,vname])
+    nknots <- NA
+    if(is.nl){
+      nknots <- as.numeric(gsub('\\)$', '', strsplit(v, ', *')[[1]][2]))
+    }
+    data.frame('var' = vname, 'num' = is.num, 'nl' = is.nl, 'nk' = nknots)
+  }))
+  if(!(xvar %in% covar.info$var)){ stop('xvar is not included in formula.rh') }
+  
+  ## Which variables do we need to set default values for?
+  vars.adj.to <- covar.info[grep(xvar, covar.info$var, invert = TRUE),]
+
+  ## For each of these, set adjustment value as follows  
+  adjto.cols <- unlist(lapply(1:nrow(vars.adj.to), FUN = function(vrow){
+    ## Function returns a named vector for each variable
+    use.var <- as.character(vars.adj.to[vrow, 'var'])
+    
+    ## If variable is categorical, set to 0 (reference level)
+    if(!vars.adj.to[vrow, 'num']){
+      vvals <- 0
+      names(vvals) <- use.var
+    } else{
+      set.to <- median(usedata[,use.var], na.rm = TRUE)
+      ## If numeric and linear, set to median
+      if(!vars.adj.to[vrow, 'nl']){
+        vvals <- set.to
+        names(vvals) <- use.var
+      } else{
+        ## If numeric and nonlinear, set to median + spline term(s) for median
+        vknots <- rcspline.eval(usedata[,use.var], nk = vars.adj.to[vrow, 'nk'], knots.only = TRUE)
+        vvals <- as.numeric(rcspline.eval(set.to, knots = vknots, inclx = TRUE))
+        names(vvals) <- paste0(use.var,
+                               unlist(lapply(1:(length(vknots) - 1), FUN = function(k){
+                                 paste(rep("'", k - 1), collapse = '') })))
+      }
+    }
+    vvals
+  }))
+  
+  ## Get values for X variable and any applicable nonlinear terms
+  ## Get all unique values of X variable
+  x.vals <- sort(unique(usedata[,xvar]))
+
+  ## Trim to %iles we want to plot, if needed
+  if(!is.null(xpctlimits)){
+    x.lims <- quantile(x.vals, probs = xpctlimits, na.rm = TRUE)
+    x.vals.trim <- x.vals[x.vals >= x.lims[1] & x.vals <= x.lims[2]]
+  } else{
+    x.vals.trim <- x.vals
+  }
+  
+  ## If X variable is nonlinear, get matrix of [knots - 1] columns
+  if(covar.info[covar.info$var == xvar, 'nl']){
+    x.knots <- rcspline.eval(usedata[,xvar],
+                             nk = covar.info[covar.info$var == xvar, 'nk'],
+                             knots.only = TRUE)
+    all.x.vals <- as.matrix(rcspline.eval(x.vals.trim, knots = x.knots, inclx = TRUE))
+    colnames(all.x.vals) <- paste0(xvar,
+                                   unlist(lapply(1:(length(x.knots) - 1), FUN = function(k){
+                                     paste(rep("'", k - 1), collapse = '') })))
+  } else{
+    ## If X variable is linear, create 1-column matrix out of trimmed unique values
+    all.x.vals <- matrix(x.vals.trim, ncol = 1)
+    colnames(all.x.vals) <- xvar
+  }
+  
+  ## How many rows will be in resulting matrix? (number of X values plotted)
+  matrows <- length(x.vals.trim)
+  
+  ## Create matrix with nrow = number of unique X values, columns = values to adjust covariates to
+  adjto.matrix <- matrix(rep(adjto.cols, matrows), ncol = length(adjto.cols), byrow = TRUE)
+  colnames(adjto.matrix) <- names(adjto.cols)
+  
+  ## Bind unique X values + nonlinear terms to covariate values
+  designmat <- cbind(adjto.matrix, all.x.vals)
+  
+  ## Add intercept column
+  cbind('(Intercept)' = rep(1, matrows), designmat)
+}
+
 @
 
 \section{NUTRIC Scores vs Katz ADL}
