@@ -269,7 +269,7 @@ were 0).
   \item Katz ADL
   \item FAQ (nonlinear)
   \end{itemize}
-\item In-hosptial characteristics
+\item In-hospital characteristics
   \begin{itemize}
   \item Mean modified daily SOFA in ICU (nonlinear) (\emph{in-hospital death: daily modified SOFA})
   \item Duration of severe sepsis (nonlinear) (\emph{in-hospital death: daily severe sepsis})
@@ -425,6 +425,16 @@ create.nutric.designmat <- function(formula.rh = c(lt.il6.rh, lt.noil6.rh),
   ## Add intercept column
   cbind('(Intercept)' = rep(1, matrows), designmat)
 }
+
+## Create design matrices using long-term cohort, one with and without NUTRIC + IL6
+lt.designmat.il6 <- create.nutric.designmat(formula.rh = lt.il6.rh,
+                                            xvar = 'nutric.il6',
+                                            xpctlimits = NULL,
+                                            cohort.var = 'cohort.lt')
+lt.designmat.noil6 <- create.nutric.designmat(formula.rh = lt.noil6.rh,
+                                              xvar = 'nutric.noil6',
+                                              xpctlimits = NULL,
+                                              cohort.var = 'cohort.lt')
 
 @
 
