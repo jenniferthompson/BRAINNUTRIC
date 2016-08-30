@@ -436,6 +436,75 @@ lt.designmat.noil6 <- create.nutric.designmat(formula.rh = lt.noil6.rh,
                                               xpctlimits = NULL,
                                               cohort.var = 'cohort.lt')
 
+## -- Step 2: Function to, for each row in design matrix, calc pred value & SE from NB model -------
+calc.nbresults <- function(nbobj,          ## negbin model object (from glm.nb())
+                           designmat,      ## matrix of covariate values; ncols = coefs in nbobj,
+                                           ##  must be in correct order
+                           xvar,           ## character string: name of variable to put on X axis
+                           intvar = NULL){ ## character string: name of interacting variable
+  
+  is.mice <- 'mira' %in% class(nbobj)
+  
+  ## Model object must be fit using glm.nb()
+  if(!('negbin' %in% class(nbobj) | (is.mice & 'negbin' %in% class(nbobj$analyses[[1]])))){
+    stop('nbobj must be of class negbin from glm.nb(), or a mice object using glm.nb to fit')
+  }
+  
+  ## Get coefficients and vcov matrix, depending on whether object is imputed via mice or not
+  if(is.mice){
+    nb.coefs <- pool(nbobj)$qbar
+    nb.vcov <- pool(nbobj)$t
+  } else{
+    nb.coefs <- coef(nbobj)
+    nb.vcov <- vcov(nbobj)
+  }
+  coefnames <- names(nb.coefs)
+  
+  ## Make sure number of coefficients in the model != number of columns in design matrix
+  if(length(coefnames) != ncol(designmat)){
+    stop("Number of model coefficients does not equal number of columns in design matrix")
+  }
+  
+  ## Make sure column names of design matrix match coefficients in order
+  ## coefnames.tmp = remove "rcs(...)" from coefficient names, allowing design matrix to have either
+  ##  "rcs(age, 3)age, rcs(age, 3)age'" OR "age, age'" as column names
+  coefnames.tmp <- gsub('^rcs\\(.*\\)', '', coefnames)
+  coefnames.equal <- unlist(lapply(1:ncol(designmat), FUN = function(v){
+    colnames(designmat)[v] == coefnames.tmp[v] |
+      length(grep(paste0('^', colnames(designmat)[v], '[0-9]*$'), coefnames.tmp[v])) > 0
+  }))
+  if(sum(!coefnames.equal) != 0){
+    stop('names of nbobj coefficients do not match column names of designmat')
+  }
+  
+  if(!(xvar %in% coefnames.tmp)){
+    stop("X axis variable name not in column names of design matrix")
+  }
+  
+  ## Calculate linear predictors and their SEs
+  lp <- apply(designmat, MARGIN = 1, FUN = function(x){ sum(nb.coefs * as.numeric(x)) })
+  lp.se <- apply(designmat, MARGIN = 1, FUN = function(x){ sqrt(t(x) %*% nb.vcov %*% x) })
+  
+  ## Calculate LCL, UCLs for linear predictors
+  lp.lcl <- lp - qnorm(0.975)*lp.se
+  lp.ucl <- lp + qnorm(0.975)*lp.se
+  
+  ## Calculate predicted counts, CIs as exp(quantities)
+  count.pe <- exp(lp)
+  count.lcl <- exp(lp.lcl)
+  count.ucl <- exp(lp.ucl)
+  
+  ## Bind all results into data frame for plotting
+  xvalue <- designmat[,xvar]
+  if(!is.null(intvar)){
+    intvalue <- designmat[,intvar]
+    return(as.data.frame(cbind(xvalue, intvalue, lp, lp.se, count.pe, count.lcl, count.ucl)))
+  } else{
+    return(as.data.frame(cbind(xvalue, lp, lp.se, count.pe, count.lcl, count.ucl)))
+  }
+}
+
+
 @
 
 \section{NUTRIC Scores vs Katz ADL}
