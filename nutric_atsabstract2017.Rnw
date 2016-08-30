@@ -560,6 +560,75 @@ create.nutric.plot.nb <- function(test = c('adl', 'faq')){
   
 }
 
+## -- Step 5: Calculate IRRs, CIs for specified values of a variable -------------------------------
+calc.ratioci.nb <- function(irr.var,          ## which variable to calculate IRR for
+                            modobj,           ## model object
+                            adjust.to = NULL, ## Adjustment values for main term;
+                                              ## default = 75th vs 25th percentile in dataset
+                            dataset,          ## data set to use to get adjustment values
+                            alpha = 0.05){    ## % CIs
+  
+  if(!(irr.var %in% names(dataset))){
+    stop('irr.var is not in columns of dataset')
+  }
+  
+  ## Get model coefficients, vcov matrix
+  modcoefs <- pool(modobj)$qbar
+  modvcov <- pool(modobj)$t
+  
+  ## How many nonlinear terms does var have in the model?
+  n.terms <- length(unique(grep(paste0(irr.var, "'*$"), names(modcoefs), value = TRUE)))
+  
+  ## Determine what values to adjust var terms to (by default, 75th and 25th percentiles of dataset)
+  if(is.null(adjust.to)){
+    ## Get percentiles for main term
+    adjust.to <- as.numeric(quantile(dataset[,irr.var], probs = c(0.25, 0.75), na.rm = TRUE))
+  } else if(length(!is.na(as.numeric(marker.adjust))) != 2){
+    stop('adjust.to must have exactly two non-missing numeric values')
+  }
+  
+  ## If variable is linear, adjust.to = 2x1 matrix
+  if(n.terms == 1){
+    adjust.matrix <- matrix(adjust.to, ncol = 1)
+  ## Otherwise, adjust.to = 2xn.terms matrix
+  } else{
+    use.knots <- rcspline.eval(dataset[,irr.var], nk = n.terms + 1, knots.only = TRUE)
+    adjust.matrix <- as.matrix(rcspline.eval(adjust.to, knots = use.knots, inclx = TRUE))
+  }
+
+  ## Calculate differences in adjustment values - this is what will be multiplied by coefficients  
+  adjust.diffs <- adjust.matrix[2,] - adjust.matrix[1,]
+  names(adjust.diffs) <- paste0(irr.var,
+                                unlist(lapply(1:n.terms, FUN = function(k){
+                                  paste(rep("'", k - 1), collapse = '') })))
+
+  ## Which coefficients do we need to use?
+  use.coefs <- grep(paste0(irr.var, "'*$"), names(modcoefs))
+  use.betas <- modcoefs[use.coefs]
+  
+  ## Get vcov matrix for involved components
+  use.vcov <- modvcov[use.coefs, use.coefs]
+  
+  ## Calculate each component of linear predictor: beta * xvals
+  beta.x <- unlist(lapply(1:length(use.betas), FUN = function(b){
+    prod(c(use.betas[b], adjust.diffs[b]))
+  }))
+  
+  irrvar.logor <- sum(beta.x)
+  irrvar.or <- exp(irrvar.logor)
+  
+  ## Calculate SE
+  irrvar.se <- sqrt(adjust.diffs %*% use.vcov %*% adjust.diffs)
+  
+  critval <- 1 - alpha / 2
+  
+  irrvar.lcl <- exp(irrvar.logor - qnorm(critval)*irrvar.se)
+  irrvar.ucl <- exp(irrvar.logor + qnorm(critval)*irrvar.se)
+  
+  return(c('pointest' = irrvar.or, 'lcl' = irrvar.lcl, 'ucl' = irrvar.ucl,
+           'ref.val' = adjust.to[1], 'comp.val' = adjust.to[2]))
+}
+
 @
 
 \section{NUTRIC Scores vs Katz ADL}
