@@ -42,6 +42,21 @@ if(Sys.info()['sysname'] == 'Darwin'){
   load('/home/thomps23/ICUDelirium/BRAINICU/braindata.Rdata')
 }
 
+## Method to use in pool.compare() for getting p-values from imputed negative binomial models
+use.method <- 'likelihood'
+
+## Function to round and format a number to the same number of digits (default = 2)
+rndformat <- function(x, digits = 2){
+  format(round(x, digits = digits), nsmall = digits)
+}
+
+## Function to format p-values
+formatp <- function(p){
+  ifelse(p < 0.0001, '<0.0001',
+  ifelse(p < 0.001, '<0.001',
+         rndformat(p, digits = 3)))
+}
+
 @
 
 The following analyses look for associations between NUTRIC scores at ICU admission and long-term
@@ -552,7 +567,7 @@ create.nutric.plot.nb <- function(test = c('adl', 'faq')){
   ## Create plot, faceted by NUTRIC version and followup time, set to Nate's preferred aesthetic
   ggplot(data = preddata, aes(x = xvalue, y = count.pe, ymin = count.lcl, ymax = count.ucl)) +
     facet_grid(time.f ~ version.f) +
-    scale_x_continuous(breaks = seq(0, max(adl.preddata$xvalue), 1),
+    scale_x_continuous(breaks = seq(0, max(preddata$xvalue), 1),
                        name = 'NUTRIC Score at ICU Admission') +
     scale_y_continuous(name = paste('Adjusted', test.ylab, 'Score')) +
     geom_pointrange(colour = "#003D79") +
@@ -629,6 +644,66 @@ calc.ratioci.nb <- function(irr.var,          ## which variable to calculate IRR
            'ref.val' = adjust.to[1], 'comp.val' = adjust.to[2]))
 }
 
+## -- Step 6: Function to create data set of results for an outcome, both times & NUTRIC vsns ------
+nb.results.data <- function(test = c('adl', 'faq')){
+  mod.nonutric.3 <- get(paste0(test, '.nonutric.3'))
+  mod.il6.3 <- get(paste0(test, '.il6.3'))
+  mod.noil6.3 <- get(paste0(test, '.noil6.3'))
+  mod.nonutric.12 <- get(paste0(test, '.nonutric.12'))
+  mod.il6.12 <- get(paste0(test, '.il6.12'))
+  mod.noil6.12 <- get(paste0(test, '.noil6.12'))
+  
+  use.data <- subset(brain.oneobs, cohort.lt)
+  
+  irrci.il6.3 <- calc.ratioci.nb(irr.var = 'nutric.il6', modobj = mod.il6.3, dataset = use.data)
+  irrci.noil6.3 <-
+    calc.ratioci.nb(irr.var = 'nutric.noil6', modobj = mod.noil6.3, dataset = use.data)
+  irrci.il6.12 <- calc.ratioci.nb(irr.var = 'nutric.il6', modobj = mod.il6.12, dataset = use.data)
+  irrci.noil6.12 <-
+    calc.ratioci.nb(irr.var = 'nutric.noil6', modobj = mod.noil6.12, dataset = use.data)
+
+  p.il6.3 <-
+    pool.compare(mod.il6.3, mod.nonutric.3, data = mice.il6.3, method = use.method)$pvalue
+  p.noil6.3 <-
+    pool.compare(mod.noil6.3, mod.nonutric.3, data = mice.noil6.3, method = use.method)$pvalue
+  p.il6.12 <-
+    pool.compare(mod.il6.12, mod.nonutric.12, data = mice.il6.12, method = use.method)$pvalue
+  p.noil6.12 <-
+    pool.compare(mod.noil6.12, mod.nonutric.12, data = mice.noil6.12, method = use.method)$pvalue
+  
+  irrp.data <- as.data.frame(rbind(c(irrci.il6.3, p.il6.3), c(irrci.noil6.3, p.noil6.3),
+                                   c(irrci.il6.12, p.il6.12), c(irrci.noil6.12, p.noil6.12)))
+  names(irrp.data)[ncol(irrp.data)] <- 'pval'
+  
+  irrp.data$time.f <- factor(c(1, 1, 2, 2), levels = 1:2, labels = c('3 Months', '12 Months'))
+  irrp.data$version.f <- factor(c(1, 2, 1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  
+  irrp.data$comp.str <- with(irrp.data, paste(comp.val, 'vs.', ref.val))
+  irrp.data$irrci.str <- with(irrp.data, paste0(rndformat(pointest), ' (',
+                                                rndformat(lcl), ', ',
+                                                rndformat(ucl), ')'))
+  irrp.data$pval.str <- formatp(irrp.data$pval)
+  
+  irrp.data
+  
+}
+
+## -- Step 7: Create a data set for printing results from nb.results.data() in a table -------------
+nb.results.table <- function(test = c('adl', 'faq')){
+  irrp.data <- nb.results.data(test) %>%
+    dplyr::select(time.f, version.f, comp.str, irrci.str, pval.str) %>%
+    gather(key = quant, value = quantity, comp.str:pval.str) %>%
+    mutate(quant = ifelse(version.f == 'With IL-6',
+                          paste0(quant, '.il6'),
+                          paste0(quant, '.noil6'))) %>%
+    dplyr::select(-version.f) %>%
+    spread(key = quant, value = quantity)
+  irrp.data[,c('time.f',
+               'comp.str.il6', 'irrci.str.il6', 'pval.str.il6',
+               'comp.str.noil6', 'irrci.str.noil6', 'pval.str.noil6')]
+}
+
+
 @
 
 \section{NUTRIC Scores vs Katz ADL}
@@ -652,6 +727,7 @@ adl.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('adl.12', lt.noil6.r
 
 ## -- Calculate and plot predicted values ----------------------------------------------------------
 adl.nutric.plot <- create.nutric.plot.nb('adl')
+adl.nutric.table <- nb.results.table('adl')
 
 @
   
