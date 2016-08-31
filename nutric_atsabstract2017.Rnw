@@ -706,6 +706,7 @@ nb.results.table <- function(test = c('adl', 'faq')){
 
 @
 
+\clearpage
 \section{NUTRIC Scores vs Katz ADL}
 <<adlmodels>>=
 ## -- 3-month ADL ----------------------------------------------------------------------------------
@@ -730,8 +731,41 @@ adl.nutric.plot <- create.nutric.plot.nb('adl')
 adl.nutric.table <- nb.results.table('adl')
 
 @
-  
 
+There is a significant association between NUTRIC scores at baseline and ADL scores at 3 months;
+this association is nonlinear, so please see Figure \ref{fig:printadlmodels} for a full picture.
+Generally, lower NUTRIC scores don't have much of a relationship with ADL scores; higher NUTRIC
+scores are associated with slightly higher ADL scores at 3 months. By 12 months, however, this
+association disappears.
+
+Table \ref{table:adlresults} shows p-values for the total association of NUTRIC score with Katz ADL
+score and incidence rate ratios comparing the 75th to the 25th percentiles of our population's
+NUTRIC scores. Here, IRRs can be interpreted as the ratio of the Katz ADL score of someone at the
+75th percentile of NUTRIC compared to someone with the 25th percentile. For example, an IRR of 1.5
+would indicate that, all other things equal, someone whose NUTRIC was
+\Sexpr{quantile(subset(brain.oneobs, cohort.lt)$nutric.il6, na.rm = TRUE, probs = 0.75)} (75th
+percentile) had on average an ADL score that was 50\% higher than someone with a NUTRIC of
+\Sexpr{quantile(subset(brain.oneobs, cohort.lt)$nutric.il6, na.rm = TRUE, probs = 0.25)} (25th
+percentile).
+  
+<<printadlmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Katz ADL Scores at 3 \\& 12 Months'>>=
+latex(adl.nutric.table[,c('time.f', 'comp.str.il6',
+                          'irrci.str.il6', 'pval.str.il6',
+                          'irrci.str.noil6', 'pval.str.noil6')],
+      file = '',
+      where = '!h',
+      caption = 'NUTRIC Score at ICU Admission vs Katz ADL Scores at 3 \\& 12 Months',
+      label = 'table:adlresults',
+      rowname = NULL,
+      colheads = c('Followup Time', 'NUTRIC Score Comparison*', rep(c('IRR (95\\% CI)', 'P-Value'), 2)),
+      col.just = c('l', rep('r', 5)),
+      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+      n.cgroup = c(2, 2, 2),
+      insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
+
+adl.nutric.plot
+
+@
 
 
 
