@@ -81,6 +81,10 @@ brain.oneobs$cohort.allpts <- with(brain.oneobs, {
                          '4. N/A Study Staff Withdrew Patient')) })
 n.allpts <- sum(brain.oneobs$cohort.allpts)
 
+## All patients with usable data and a full NUTRIC score at baseline
+brain.oneobs$cohort.allpts.il6 <- with(brain.oneobs, cohort.allpts & !is.na(nutric.il6))
+n.allpts.il6 <- sum(brain.oneobs$cohort.allpts.il6)
+
 ## All hospital survivors who remained in study
 brain.oneobs$cohort.survivors <- with(brain.oneobs, {
   cohort.allpts &
@@ -88,18 +92,31 @@ brain.oneobs$cohort.survivors <- with(brain.oneobs, {
     (is.na(studywd) | studywd == 'No') })
 n.survivors <- sum(brain.oneobs$cohort.survivors)
 
+## All hospital survivors who remained in study and had full NUTRIC at baseline
+brain.oneobs$cohort.survivors.il6 <- with(brain.oneobs, cohort.survivors & !is.na(nutric.il6))
+n.survivors.il6 <- sum(brain.oneobs$cohort.survivors.il6)
+
 ## All patients with long-term outcomes at each time point
 brain.oneobs$cohort.3m <- with(brain.oneobs, {
   cohort.survivors & id %in% subset(brain.fu, fu.period == '3 Month' & any.outcomes)$id })
 n.3m <- sum(brain.oneobs$cohort.3m)
 
+brain.oneobs$cohort.3m.il6 <- with(brain.oneobs, cohort.3m & !is.na(nutric.il6))
+n.3m.il6 <- sum(brain.oneobs$cohort.3m.il6)
+
 brain.oneobs$cohort.12m <- with(brain.oneobs, {
   cohort.survivors & id %in% subset(brain.fu, fu.period == '12 Month' & any.outcomes)$id })
 n.12m <- sum(brain.oneobs$cohort.12m)
 
+brain.oneobs$cohort.12m.il6 <- with(brain.oneobs, cohort.12m & !is.na(nutric.il6))
+n.12m.il6 <- sum(brain.oneobs$cohort.12m.il6)
+
 ## Total number of patients with any long-term outcomes
 brain.oneobs$cohort.lt <- with(brain.oneobs, cohort.3m | cohort.12m)
 n.lt <- sum(brain.oneobs$cohort.lt)
+
+brain.oneobs$cohort.lt.il6 <- with(brain.oneobs, cohort.3m.il6 | cohort.12m.il6)
+n.lt.il6 <- sum(brain.oneobs$cohort.lt.il6)
 
 ## Add followup variables to main data set
 fu.outcomes <- brain.fu %>%
@@ -126,25 +143,38 @@ brain.oneobs$nutric.atrisk.noil6 <- with(brain.oneobs, factor(ifelse(is.na(nutri
                                                               levels = 1:2,
                                                               labels = c('No', 'Yes')))
 
+## -- Create a table of the number of patients in each cohort --------------------------------------
+cohort.ns <- data.frame(cohort = c('In-hospital mortality',
+                                   'Discharge location and long-term mortality',
+                                   'Long-term cognitive and disability',
+                                   '~~~3 months',
+                                   '~~~12 months'),
+                        n.il6 = c(n.allpts.il6, n.survivors.il6, n.lt.il6, n.3m.il6, n.12m.il6),
+                        n.noil6 = c(n.allpts, n.survivors, n.lt, n.3m, n.12m))
+
 @
 
-There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. For
-these analyses, the following subsets of patients will be included:
-\begin{itemize}
-\item In-hospital mortality: all \Sexpr{n.allpts} patients
-\item Discharge location and long-term mortality: \Sexpr{n.survivors} hospital survivors
-\item Long-term cognitive and disability outcomes: patients with at least partial cognitive and/or
-disability outcomes at each time point
-  \begin{itemize}
-  \item \Sexpr{n.3m} at 3 months
-  \item \Sexpr{n.12m} at 12 months
-  \item total of \Sexpr{n.lt} unique patients
-  \end{itemize}
-\end{itemize}
+There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. Table
+\ref{table:ncohort} describes the number of patients included in each analysis. We will not impute
+missing NUTRIC scores due to the involvement of IL-6; therefore different numbers of patients will
+be included in models using the full vs. the modified NUTRIC score.
+
+<<printncohort, results = 'asis'>>=
+latex(cohort.ns, file = '',
+      where = '!h',
+      caption = 'Number of Patients in Each Analysis Cohort',
+      caption.lot = 'Number of Patients in Each Analysis Cohort',
+      label = 'table:ncohort',
+      rowname = NULL,
+      colheads = c('Cohort', 'Using Full NUTRIC', 'Using Modified NUTRIC'),
+      col.just = c('l', 'c', 'c'))
+
+@
 
 Tables \ref{table:descinhosp} and \ref{table:desclt} describe baseline, in-hospital, and followup
-characteristics of all three cohorts. Figure \ref{fig:km365} shows a Kaplan-Meier curve representing
-mortality over the year following enrollment for all patients.
+characteristics of all three modified-NUTRIC cohorts (patients included in full-NUTRIC analyses are
+a subset of this group). Figure \ref{fig:km365} shows a Kaplan-Meier curve representing mortality
+over the year following enrollment for all patients.
 
 <<km365, results='asis', fig.cap='Kaplan-Meier Curve, Mortality up to 365 Days after Enrollment'>>=
 ## -- Kaplan-Meier curve for 365-day mortality -----------------------------------------------------
@@ -318,10 +348,10 @@ lt.noil6.rh <- paste(lt.nonutric.rh, '+ rcs(nutric.noil6, 3)')
 lt.outcomes <- c('adl', 'faq', 'rbans.global', 'trail.b', 'sf36.mcs', 'sf36.pcs')
 
 ## Create data sets for each model set: two time points, using NUTRIC with/without IL-6
-modeldata.il6.3 <- brain.oneobs[brain.oneobs$cohort.3m,
+modeldata.il6.3 <- brain.oneobs[brain.oneobs$cohort.3m.il6,
                                 c(lt.covars, 'nutric.il6', paste(lt.outcomes, 3, sep = '.'))]
 
-modeldata.il6.12 <- brain.oneobs[brain.oneobs$cohort.12m,
+modeldata.il6.12 <- brain.oneobs[brain.oneobs$cohort.12m.il6,
                                  c(lt.covars, 'nutric.il6', paste(lt.outcomes, 12, sep = '.'))]
 
 modeldata.noil6.3 <- brain.oneobs[brain.oneobs$cohort.3m,
@@ -646,11 +676,13 @@ calc.ratioci.nb <- function(irr.var,          ## which variable to calculate IRR
 
 ## -- Step 6: Function to create data set of results for an outcome, both times & NUTRIC vsns ------
 nb.results.data <- function(test = c('adl', 'faq')){
-  mod.nonutric.3 <- get(paste0(test, '.nonutric.3'))
+  mod.nonutric.il6.3 <- get(paste0(test, '.nonutric.il6.3'))
   mod.il6.3 <- get(paste0(test, '.il6.3'))
+  mod.nonutric.noil6.3 <- get(paste0(test, '.nonutric.noil6.3'))
   mod.noil6.3 <- get(paste0(test, '.noil6.3'))
-  mod.nonutric.12 <- get(paste0(test, '.nonutric.12'))
+  mod.nonutric.il6.12 <- get(paste0(test, '.nonutric.il6.12'))
   mod.il6.12 <- get(paste0(test, '.il6.12'))
+  mod.nonutric.noil6.12 <- get(paste0(test, '.nonutric.noil6.12'))
   mod.noil6.12 <- get(paste0(test, '.noil6.12'))
   
   use.data <- subset(brain.oneobs, cohort.lt)
@@ -663,13 +695,13 @@ nb.results.data <- function(test = c('adl', 'faq')){
     calc.ratioci.nb(irr.var = 'nutric.noil6', modobj = mod.noil6.12, dataset = use.data)
 
   p.il6.3 <-
-    pool.compare(mod.il6.3, mod.nonutric.3, data = mice.il6.3, method = use.method)$pvalue
+    pool.compare(mod.il6.3, mod.nonutric.il6.3, data = mice.il6.3, method = use.method)$pvalue
   p.noil6.3 <-
-    pool.compare(mod.noil6.3, mod.nonutric.3, data = mice.noil6.3, method = use.method)$pvalue
+    pool.compare(mod.noil6.3, mod.nonutric.noil6.3, data = mice.noil6.3, method = use.method)$pvalue
   p.il6.12 <-
-    pool.compare(mod.il6.12, mod.nonutric.12, data = mice.il6.12, method = use.method)$pvalue
+    pool.compare(mod.il6.12, mod.nonutric.il6.12, data = mice.il6.12, method = use.method)$pvalue
   p.noil6.12 <-
-    pool.compare(mod.noil6.12, mod.nonutric.12, data = mice.noil6.12, method = use.method)$pvalue
+    pool.compare(mod.noil6.12, mod.nonutric.noil6.12, data = mice.noil6.12, method = use.method)$pvalue
   
   irrp.data <- as.data.frame(rbind(c(irrci.il6.3, p.il6.3), c(irrci.noil6.3, p.noil6.3),
                                    c(irrci.il6.12, p.il6.12), c(irrci.noil6.12, p.noil6.12)))
@@ -710,8 +742,11 @@ nb.results.table <- function(test = c('adl', 'faq')){
 \section{NUTRIC Scores vs Katz ADL}
 <<adlmodels>>=
 ## -- 3-month ADL ----------------------------------------------------------------------------------
-## Fit model without NUTRIC score to use in pool.compare()
-adl.nonutric.3 <- with(mice.il6.3, glm.nb(as.formula(paste('adl.3', lt.nonutric.rh, sep = ' ~ '))))
+## Fit models without NUTRIC score to use in pool.compare()
+adl.nonutric.il6.3 <-
+  with(mice.il6.3, glm.nb(as.formula(paste('adl.3', lt.nonutric.rh, sep = ' ~ '))))
+adl.nonutric.noil6.3 <-
+  with(mice.noil6.3, glm.nb(as.formula(paste('adl.3', lt.nonutric.rh, sep = ' ~ '))))
 
 ## Fit 3-month models
 adl.il6.3 <- with(mice.il6.3, glm.nb(as.formula(paste('adl.3', lt.il6.rh, sep = ' ~ '))))
@@ -719,8 +754,10 @@ adl.noil6.3 <- with(mice.noil6.3, glm.nb(as.formula(paste('adl.3', lt.noil6.rh, 
 
 ## -- 12-month ADL ---------------------------------------------------------------------------------
 ## Fit model without NUTRIC score to use in pool.compare()
-adl.nonutric.12 <-
+adl.nonutric.il6.12 <-
   with(mice.il6.12, glm.nb(as.formula(paste('adl.12', lt.nonutric.rh, sep = ' ~ '))))
+adl.nonutric.noil6.12 <-
+  with(mice.noil6.12, glm.nb(as.formula(paste('adl.12', lt.nonutric.rh, sep = ' ~ '))))
 
 ## Fit 12-month models
 adl.il6.12 <- with(mice.il6.12, glm.nb(as.formula(paste('adl.12', lt.il6.rh, sep = ' ~ '))))
