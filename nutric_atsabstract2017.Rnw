@@ -735,6 +735,33 @@ nb.results.table <- function(test = c('adl', 'faq')){
                'comp.str.noil6', 'irrci.str.noil6', 'pval.str.noil6')]
 }
 
+## -- Function to create a table showing missingness for each covariate in a model -----------------
+nb.missing.table <- function(test = c('adl', 'faq')){
+  nmis.3m.il6 <- get(paste0(test, '.il6.3'))$nmis
+  nmis.3m.noil6 <- get(paste0(test, '.noil6.3'))$nmis
+  nmis.12m.il6 <- get(paste0(test, '.il6.12'))$nmis
+  nmis.12m.noil6 <- get(paste0(test, '.noil6.12'))$nmis
+  names(nmis.3m.il6) <- gsub('\\.[no]*il6', '', gsub('\\.3', '.lt', names(nmis.3m.il6)))
+  names(nmis.3m.noil6) <- gsub('\\.[no]*il6', '', gsub('\\.3', '.lt', names(nmis.3m.noil6)))
+  names(nmis.12m.il6) <- gsub('\\.[no]*il6', '', gsub('\\.12', '.lt', names(nmis.12m.il6)))
+  names(nmis.12m.noil6) <- gsub('\\.[no]*il6', '', gsub('\\.12', '.lt', names(nmis.12m.noil6)))
+  
+  pctmis.3m.il6 <- round((nmis.3m.il6 / n.3m.il6)*100)
+  pctmis.3m.noil6 <- round((nmis.3m.noil6 / n.3m)*100)
+  pctmis.12m.il6 <- round((nmis.12m.il6 / n.12m.il6)*100)
+  pctmis.12m.noil6 <- round((nmis.12m.noil6 / n.12m)*100)
+  
+  miss.data <- data.frame(cbind(nmis.3m.il6, nmis.3m.noil6, nmis.12m.il6, nmis.12m.noil6,
+                                pctmis.3m.il6, pctmis.3m.noil6, pctmis.12m.il6, pctmis.12m.noil6))
+  miss.data$npct.3m.il6 <- with(miss.data, paste0(pctmis.3m.il6, '\\% (', nmis.3m.il6, ')'))
+  miss.data$npct.3m.noil6 <- with(miss.data, paste0(pctmis.3m.noil6, '\\% (', nmis.3m.noil6, ')'))
+  miss.data$npct.12m.il6 <- with(miss.data, paste0(pctmis.12m.il6, '\\% (', nmis.12m.il6, ')'))
+  miss.data$npct.12m.noil6 <- with(miss.data, paste0(pctmis.12m.noil6, '\\% (', nmis.12m.noil6, ')'))
+  
+  miss.data[rownames(miss.data) %in% c(lt.covars, 'nutric', paste0(test, '.lt')), 9:12]
+}
+
+
 
 @
 
@@ -766,6 +793,7 @@ adl.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('adl.12', lt.noil6.r
 ## -- Calculate and plot predicted values ----------------------------------------------------------
 adl.nutric.plot <- create.nutric.plot.nb('adl')
 adl.nutric.table <- nb.results.table('adl')
+adl.missing.table <- nb.missing.table('adl')
 
 @
 
@@ -801,6 +829,17 @@ latex(adl.nutric.table[,c('time.f', 'comp.str.il6',
       insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
 
 adl.nutric.plot
+
+latex(adl.missing.table,
+      file = '',
+      title = '',
+      where = '!h',
+      caption = 'Missing Data for Katz ADL vs NUTRIC at Both Time Points',
+      label = 'table:adlmissing',
+      colheads = rep(c('With IL-6', 'Without IL-6'), 2),
+      col.just = rep('c', 4),
+      cgroup = c('3 Months', '12 Months'),
+      n.cgroup = c(2, 2))
 
 @
 
