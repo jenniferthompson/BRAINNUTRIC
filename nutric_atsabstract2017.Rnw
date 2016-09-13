@@ -366,7 +366,7 @@ mice.il6.12 <- mice(data = modeldata.il6.12, m = 10, visitSequence = 'monotone',
 mice.noil6.3 <- mice(data = modeldata.noil6.3, m = 10, visitSequence = 'monotone', seed = 56)
 mice.noil6.12 <- mice(data = modeldata.noil6.12, m = 10, visitSequence = 'monotone', seed = 56)
 
-## -- Functions for plotting results of negative binomial models -----------------------------------
+## -- Functions for calculating & plotting results of negative binomial models ---------------------
 ## -- Step 1: Create design matrix for a given set of covariates -----------------------------------
 create.nutric.designmat <- function(formula.rh = c(lt.il6.rh, lt.noil6.rh),
                                       ## which model formula's righthand side to use
@@ -766,7 +766,7 @@ nb.missing.table <- function(test = c('adl', 'faq')){
 @
 
 \clearpage
-\section{NUTRIC Scores vs Katz ADL}
+\section{NUTRIC Scores vs ADLs (Katz ADL)}
 <<adlmodels>>=
 ## -- 3-month ADL ----------------------------------------------------------------------------------
 ## Fit models without NUTRIC score to use in pool.compare()
@@ -836,6 +836,82 @@ latex(adl.missing.table,
       where = '!h',
       caption = 'Missing Data for Katz ADL vs NUTRIC at Both Time Points',
       label = 'table:adlmissing',
+      colheads = rep(c('With IL-6', 'Without IL-6'), 2),
+      col.just = rep('c', 4),
+      cgroup = c('3 Months', '12 Months'),
+      n.cgroup = c(2, 2))
+
+@
+
+\clearpage
+\section{NUTRIC Scores vs IADLs (Functional Activities Questionnaire)}
+<<faqmodels>>=
+## -- 3-month FAQ ----------------------------------------------------------------------------------
+## Fit models without NUTRIC score to use in pool.compare()
+faq.nonutric.il6.3 <-
+  with(mice.il6.3, glm.nb(as.formula(paste('faq.3', lt.nonutric.rh, sep = ' ~ '))))
+faq.nonutric.noil6.3 <-
+  with(mice.noil6.3, glm.nb(as.formula(paste('faq.3', lt.nonutric.rh, sep = ' ~ '))))
+
+## Fit 3-month models
+faq.il6.3 <- with(mice.il6.3, glm.nb(as.formula(paste('faq.3', lt.il6.rh, sep = ' ~ '))))
+faq.noil6.3 <- with(mice.noil6.3, glm.nb(as.formula(paste('faq.3', lt.noil6.rh, sep = ' ~ '))))
+
+## -- 12-month FAQ ---------------------------------------------------------------------------------
+## Fit model without NUTRIC score to use in pool.compare()
+faq.nonutric.il6.12 <-
+  with(mice.il6.12, glm.nb(as.formula(paste('faq.12', lt.nonutric.rh, sep = ' ~ '))))
+faq.nonutric.noil6.12 <-
+  with(mice.noil6.12, glm.nb(as.formula(paste('faq.12', lt.nonutric.rh, sep = ' ~ '))))
+
+## Fit 12-month models
+faq.il6.12 <- with(mice.il6.12, glm.nb(as.formula(paste('faq.12', lt.il6.rh, sep = ' ~ '))))
+faq.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('faq.12', lt.noil6.rh, sep = ' ~ '))))
+
+## -- Calculate and plot predicted values ----------------------------------------------------------
+faq.nutric.plot <- create.nutric.plot.nb('faq')
+faq.nutric.table <- nb.results.table('faq')
+faq.missing.table <- nb.missing.table('faq')
+
+@
+
+We see no meaningful association between NUTRIC score at baseline and score on the Functional
+Activities Questionnaire at either followup time.
+
+Figure \ref{fig:printfaqmodels} shows the full relationships between baseline NUTRIC score and
+followup FAQ scores. Table \ref{table:faqresults} shows p-values for the total association of NUTRIC
+score with FAQ score and incidence rate ratios comparing the 75th to the 25th percentiles of our
+population's NUTRIC scores. Here, IRRs can be interpreted as the ratio of the FAQ score of someone
+at the 75th percentile of NUTRIC compared to someone with the 25th percentile. For example, an IRR
+of 1.5 would indicate that, all other things equal, someone whose NUTRIC was
+\Sexpr{quantile(subset(brain.oneobs, cohort.lt)$nutric.il6, na.rm = TRUE, probs = 0.75)} (75th
+percentile) had on average an FAQ score that was 50\% higher than someone with a NUTRIC of
+\Sexpr{quantile(subset(brain.oneobs, cohort.lt)$nutric.il6, na.rm = TRUE, probs = 0.25)} (25th
+percentile).
+  
+<<printfaqmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs IADLs (FAQ Scores) at 3 \\& 12 Months'>>=
+latex(faq.nutric.table[,c('time.f', 'comp.str.il6',
+                          'irrci.str.il6', 'pval.str.il6',
+                          'irrci.str.noil6', 'pval.str.noil6')],
+      file = '',
+      where = '!h',
+      caption = 'NUTRIC Score at ICU Admission vs IADLs (FAQ Scores) at 3 \\& 12 Months',
+      label = 'table:faqresults',
+      rowname = NULL,
+      colheads = c('Followup Time', 'NUTRIC Score Comparison*', rep(c('IRR (95\\% CI)', 'P-Value'), 2)),
+      col.just = c('l', rep('r', 5)),
+      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+      n.cgroup = c(2, 2, 2),
+      insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
+
+faq.nutric.plot
+
+latex(faq.missing.table,
+      file = '',
+      title = '',
+      where = '!h',
+      caption = 'Missing Data for FAQ vs NUTRIC at Both Time Points',
+      label = 'table:faqmissing',
       colheads = rep(c('With IL-6', 'Without IL-6'), 2),
       col.just = rep('c', 4),
       cgroup = c('3 Months', '12 Months'),
