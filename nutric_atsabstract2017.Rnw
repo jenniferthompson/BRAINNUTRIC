@@ -43,7 +43,7 @@ if(Sys.info()['sysname'] == 'Darwin'){
 }
 
 ## Method to use in pool.compare() for getting p-values from imputed negative binomial models
-use.method <- 'likelihood'
+use.method <- 'Wald'
 
 ## Function to round and format a number to the same number of digits (default = 2)
 rndformat <- function(x, digits = 2){
@@ -176,6 +176,11 @@ characteristics of all three modified-NUTRIC cohorts (patients included in full-
 a subset of this group). Figure \ref{fig:km365} shows a Kaplan-Meier curve representing mortality
 over the year following enrollment for all patients.
 
+Figure \ref{fig:nutricplot} compares full and modified NUTRIC scores (ie, with and without IL-6) by
+cohort among patients who have both available (ie, have at least one IL-6 measurement before study
+day 5). For the vast majority of patients, these two versions of the NUTRIC are equivalent; in our
+cohort, including IL-6 doesn't seem to make very much difference.
+
 <<km365, results='asis', fig.cap='Kaplan-Meier Curve, Mortality up to 365 Days after Enrollment'>>=
 ## -- Kaplan-Meier curve for 365-day mortality -----------------------------------------------------
 ## Create Surv object
@@ -183,9 +188,12 @@ allmort.Surv <-
   with(brain.oneobs, Surv(time = days.deathlast.365, event = as.numeric(died.brain.365)))
 
 ## Create plot
-ggsurv(survfit(allmort.Surv ~ 1)) +
-  scale_x_continuous(name = 'Days since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
-  scale_y_continuous('Probability Alive')
+## values = c('#b70808', '#003D79')
+ggsurv(survfit(allmort.Surv ~ 1), surv.col = '#003D79', cens.col = '#b70808') +
+  scale_colour_manual(values = c('#003D79')) +
+  scale_x_continuous(name = 'Days Since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
+  scale_y_continuous('Probability Alive') +
+  theme_bw()
 
 @
 
@@ -252,6 +260,25 @@ label(desc.data.all$sf36.pcs.12) <- 'SF36 PCS, 12m'
 label(desc.data.all$sf36.mcs.3) <- 'SF36 MCS, 3m'
 label(desc.data.all$sf36.mcs.12) <- 'SF36 MCS, 12m'
 
+## -- Create plot of full vs modified NUTRIC scores ------------------------------------------------
+nutric.scatter <- ggplot(data = subset(desc.data.all, !is.na(nutric.il6)),
+                         aes(x = nutric.il6, y = nutric.noil6)) +
+  facet_wrap(~ cohort, ncol = 3) +
+  geom_point(aes(colour = (nutric.il6 == nutric.noil6)),
+             position = position_jitter(width = 0.8, height = 0.8), alpha = 0.3, size = 0.6) +
+  geom_rug(aes(colour = (nutric.il6 == nutric.noil6)),
+           position = position_jitter(width = 0.75), alpha = 0.2) +
+  scale_x_continuous(name = 'Full NUTRIC (Including IL-6)', limits = c(-0.5, 10.5), breaks = 0:10) +
+  scale_y_continuous(name = 'Modified NUTRIC, Excluding IL-6', limits = c(-0.5, 9.5), breaks = 0:9) +
+  scale_colour_manual(name = 'Full NUTRIC = Modified NUTRIC', values = c('#b70808', '#003D79')) +
+  theme_bw() +
+  theme(legend.position = 'bottom', legend.direction = 'horizontal',
+        legend.key.size = unit(0.4, 'cm'),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 8),
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 7))
+
 @
 
 <<printdescstats, results = 'asis'>>=
@@ -259,6 +286,7 @@ latex(summaryM(formula(paste(paste(desc.vars, collapse = ' + '), '~ cohort')),
                data = desc.data.all),
       file = '',
       digits = 2,
+      where = '!h',
       caption = 'Baseline and In-Hospital Characteristics for Each Cohort',
       caption.lot = 'Baseline and In-Hospital Characteristics for Each Cohort',
       label = 'table:descinhosp',
@@ -285,10 +313,15 @@ latex(summaryM(formula(paste(paste(lt.vars, collapse = ' + '), '~ 1')),
 
 @
 
-% \clearpage
+<<nutricplot, results = 'asis', fig.cap='Full vs Modified NUTRIC Scores by Cohort', fig.width=7.5, fig.height=3.75>>=
+nutric.scatter
+
+@
+
+\clearpage
 \section{General Methods} \label{sec:covars}
 All analyses are done using multivariable regression; specific types of regression are noted for
-each outcome.
+each outcome. All hypothesis testing is done using the Wald method.
 
 To avoid bias as much as possible, models for all long-term cognitive and disability outcomes are
 done using multiple imputation. All patients with at least partial outcomes data at that time point
@@ -918,9 +951,6 @@ latex(faq.missing.table,
       n.cgroup = c(2, 2))
 
 @
-
-
-
 
 
 % \end{landscape}
