@@ -894,8 +894,8 @@ is presented in Table \ref{table:ltmissing}.
 latex(missing.lt.df, file = '',
       title = '',
       where = '!h',
-      caption = 'Missing Data for Long-Term Outcomes vs NUTRIC at Both Time Points',
-      caption.lot = 'Missing Data for Long-Term Outcomes vs NUTRIC at Both Time Points',
+      caption = 'Missing Data for Long-Term Outcome Models',
+      caption.lot = 'Missing Data for Long-Term Outcome Models',
       label = 'table:ltmissing',
       rowname = NULL,
       colheads = c('Variable', rep(c('With IL-6', 'Without IL-6'), 2)),
@@ -933,7 +933,6 @@ adl.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('adl.12', lt.noil6.r
 ## -- Calculate and plot predicted values ----------------------------------------------------------
 adl.nutric.plot <- create.nutric.plot('adl')
 adl.nutric.table <- results.table('adl')
-# adl.missing.table <- nb.missing.table('adl')
 
 @
 
@@ -959,6 +958,7 @@ latex(adl.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il
       file = '',
       where = '!h',
       caption = 'NUTRIC Score at ICU Admission vs Katz ADL Scores at 3 \\& 12 Months',
+      caption.lot = 'NUTRIC vs ADLs (Katz ADL Scores)',
       label = 'table:adlresults',
       rowname = NULL,
       colheads = c('Followup Time', 'NUTRIC Score Comparison*',
@@ -969,17 +969,6 @@ latex(adl.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il
       insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
 
 adl.nutric.plot
-
-# latex(adl.missing.table,
-#       file = '',
-#       title = '',
-#       where = '!h',
-#       caption = 'Missing Data for Katz ADL vs NUTRIC at Both Time Points',
-#       label = 'table:adlmissing',
-#       colheads = rep(c('With IL-6', 'Without IL-6'), 2),
-#       col.just = rep('c', 4),
-#       cgroup = c('3 Months', '12 Months'),
-#       n.cgroup = c(2, 2))
 
 @
 
@@ -1011,7 +1000,6 @@ faq.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('faq.12', lt.noil6.r
 ## -- Calculate and plot predicted values ----------------------------------------------------------
 faq.nutric.plot <- create.nutric.plot('faq')
 faq.nutric.table <- results.table('faq')
-# faq.missing.table <- nb.missing.table('faq')
 
 @
 
@@ -1035,6 +1023,7 @@ latex(faq.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il
       file = '',
       where = '!h',
       caption = 'NUTRIC Score at ICU Admission vs IADLs (FAQ Scores) at 3 \\& 12 Months',
+      caption.lot = 'NUTRIC vs IADLs (FAQ Scores)',
       label = 'table:faqresults',
       rowname = NULL,
       colheads = c('Followup Time', 'NUTRIC Score Comparison*',
@@ -1045,17 +1034,6 @@ latex(faq.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il
       insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
 
 faq.nutric.plot
-
-# latex(faq.missing.table,
-#       file = '',
-#       title = '',
-#       where = '!h',
-#       caption = 'Missing Data for FAQ vs NUTRIC at Both Time Points',
-#       label = 'table:faqmissing',
-#       colheads = rep(c('With IL-6', 'Without IL-6'), 2),
-#       col.just = rep('c', 4),
-#       cgroup = c('3 Months', '12 Months'),
-#       n.cgroup = c(2, 2))
 
 @
 
@@ -1106,6 +1084,34 @@ rbans.pred.noil6.12 <- Predict(rbans.noil6.12, nutric.noil6 = NA)
 
 rbans.nutric.plot <- create.nutric.plot('rbans')
 rbans.nutric.table <- results.table('rbans')
+
+@
+
+We see no meaningful association between NUTRIC score at baseline and RBANS global cognition score
+at either followup time.
+
+Figure \ref{fig:printrbansmodels} shows the full relationships between baseline NUTRIC score and
+followup RBANS scores. Table \ref{table:rbansresults} shows p-values for the total association of
+NUTRIC score with FAQ score and adjusted differences in RBANS scores between the 75th and the 25th
+percentiles of our population's NUTRIC scores.
+  
+<<printrbansmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Global Cognition (RBANS Global Scores) at 3 \\& 12 Months'>>=
+latex(rbans.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                            'peci.str.noil6', 'pval.str.noil6')],
+      file = '',
+      where = '!h',
+      caption = 'NUTRIC Score at ICU Admission vs Global Cognition (RBANS Global Scores) at 3 \\& 12 Months',
+      caption.lot = 'NUTRIC vs Global Cognition (RBANS Global Scores)',
+      label = 'table:rbansresults',
+      rowname = NULL,
+      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
+                   rep(c('Difference (95\\% CI)', 'P-Value'), 2)),
+      col.just = c('l', rep('r', 5)),
+      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+      n.cgroup = c(2, 2, 2),
+      insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
+
+rbans.nutric.plot
 
 @
 
