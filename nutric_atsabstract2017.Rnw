@@ -321,7 +321,7 @@ nutric.scatter
 \clearpage
 \section{General Methods} \label{sec:covars}
 All analyses are done using multivariable regression; specific types of regression are noted for
-each outcome. All hypothesis testing is done using the Wald method.
+each outcome. All hypothesis testing is done using the \Sexpr{use.method} method.
 
 To avoid bias as much as possible, models for all long-term cognitive and disability outcomes are
 done using multiple imputation. All patients with at least partial outcomes data at that time point
@@ -707,16 +707,17 @@ calc.ratioci.nb <- function(irr.var,          ## which variable to calculate IRR
            'ref.val' = adjust.to[1], 'comp.val' = adjust.to[2]))
 }
 
-## -- Step 6: Function to create data set of results for an outcome, both times & NUTRIC vsns ------
-nb.results.data <- function(test = c('adl', 'faq')){
-  mod.nonutric.il6.3 <- get(paste0(test, '.nonutric.il6.3'))
-  mod.il6.3 <- get(paste0(test, '.il6.3'))
-  mod.nonutric.noil6.3 <- get(paste0(test, '.nonutric.noil6.3'))
-  mod.noil6.3 <- get(paste0(test, '.noil6.3'))
-  mod.nonutric.il6.12 <- get(paste0(test, '.nonutric.il6.12'))
-  mod.il6.12 <- get(paste0(test, '.il6.12'))
-  mod.nonutric.noil6.12 <- get(paste0(test, '.nonutric.noil6.12'))
-  mod.noil6.12 <- get(paste0(test, '.noil6.12'))
+## -- Step 6: Functions to create data set of results for an outcome, both times & NUTRIC vsns -----
+## -- Negative binomial models using mice ----------------------------------------------------------
+nb.results.data <- function(outcome = c('adl', 'faq')){
+  mod.nonutric.il6.3 <- get(paste0(outcome, '.nonutric.il6.3'))
+  mod.il6.3 <- get(paste0(outcome, '.il6.3'))
+  mod.nonutric.noil6.3 <- get(paste0(outcome, '.nonutric.noil6.3'))
+  mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
+  mod.nonutric.il6.12 <- get(paste0(outcome, '.nonutric.il6.12'))
+  mod.il6.12 <- get(paste0(outcome, '.il6.12'))
+  mod.nonutric.noil6.12 <- get(paste0(outcome, '.nonutric.noil6.12'))
+  mod.noil6.12 <- get(paste0(outcome, '.noil6.12'))
   
   use.data <- subset(brain.oneobs, cohort.lt)
   
@@ -734,38 +735,86 @@ nb.results.data <- function(test = c('adl', 'faq')){
   p.il6.12 <-
     pool.compare(mod.il6.12, mod.nonutric.il6.12, data = mice.il6.12, method = use.method)$pvalue
   p.noil6.12 <-
-    pool.compare(mod.noil6.12, mod.nonutric.noil6.12, data = mice.noil6.12, method = use.method)$pvalue
+    pool.compare(mod.noil6.12, mod.nonutric.noil6.12,
+                 data = mice.noil6.12, method = use.method)$pvalue
   
   irrp.data <- as.data.frame(rbind(c(irrci.il6.3, p.il6.3), c(irrci.noil6.3, p.noil6.3),
                                    c(irrci.il6.12, p.il6.12), c(irrci.noil6.12, p.noil6.12)))
   names(irrp.data)[ncol(irrp.data)] <- 'pval'
   
   irrp.data$time.f <- factor(c(1, 1, 2, 2), levels = 1:2, labels = c('3 Months', '12 Months'))
-  irrp.data$version.f <- factor(c(1, 2, 1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  irrp.data$version.f <-
+    factor(c(1, 2, 1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
   
   irrp.data$comp.str <- with(irrp.data, paste(comp.val, 'vs.', ref.val))
-  irrp.data$irrci.str <- with(irrp.data, paste0(rndformat(pointest), ' (',
-                                                rndformat(lcl), ', ',
-                                                rndformat(ucl), ')'))
+  irrp.data$peci.str <- with(irrp.data, paste0(rndformat(pointest), ' (',
+                                               rndformat(lcl), ', ',
+                                               rndformat(ucl), ')'))
   irrp.data$pval.str <- formatp(irrp.data$pval)
   
   irrp.data
   
 }
 
-## -- Step 7: Create a data set for printing results from nb.results.data() in a table -------------
-nb.results.table <- function(test = c('adl', 'faq')){
-  irrp.data <- nb.results.data(test) %>%
-    dplyr::select(time.f, version.f, comp.str, irrci.str, pval.str) %>%
+## -- Linear models using rms ----------------------------------------------------------------------
+ols.results.data <- function(outcome = c('rbans', 'trailb')){
+  mod.il6.3 <- get(paste0(outcome, '.il6.3'))
+  mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
+  mod.il6.12 <- get(paste0(outcome, '.il6.12'))
+  mod.noil6.12 <- get(paste0(outcome, '.noil6.12'))
+  
+  sum.il6.3 <- get(paste0(outcome, '.sum.il6.3'))
+  sum.noil6.3 <- get(paste0(outcome, '.sum.noil6.3'))
+  sum.il6.12 <- get(paste0(outcome, '.sum.il6.12'))
+  sum.noil6.12 <- get(paste0(outcome, '.sum.noil6.12'))
+
+  diffci.il6.3 <- sum.il6.3[grep('^nutric', rownames(sum.il6.3)),]
+  diffci.noil6.3 <- sum.noil6.3[grep('^nutric', rownames(sum.noil6.3)),]
+  diffci.il6.12 <- sum.il6.12[grep('^nutric', rownames(sum.il6.12)),]
+  diffci.noil6.12 <- sum.noil6.12[grep('^nutric', rownames(sum.noil6.12)),]
+  
+  p.list <- lapply(list(mod.il6.3, mod.noil6.3, mod.il6.12, mod.noil6.12), FUN = function(m){
+    anova(m)[grep('^nutric', rownames(anova(m))), 'P'] })
+  
+  diffcip.data <-
+    as.data.frame(rbind(c(diffci.il6.3, p.list[[1]]), c(diffci.noil6.3, p.list[[2]]),
+                        c(diffci.il6.12, p.list[[3]]), c(diffci.noil6.12, p.list[[4]])))
+  names(diffcip.data) <- c('ref.val', 'comp.val', 'diff', 'pointest', 'se', 'lcl', 'ucl',
+                           'type', 'pval')
+
+  diffcip.data$time.f <- factor(c(1, 1, 2, 2), levels = 1:2, labels = c('3 Months', '12 Months'))
+  diffcip.data$version.f <-
+    factor(c(1, 2, 1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  
+  diffcip.data$comp.str <- with(diffcip.data, paste(comp.val, 'vs.', ref.val))
+  diffcip.data$peci.str <- with(diffcip.data, paste0(rndformat(pointest), ' (',
+                                                     rndformat(lcl), ', ',
+                                                     rndformat(ucl), ')'))
+  diffcip.data$pval.str <- formatp(diffcip.data$pval)
+  
+  diffcip.data
+
+}
+
+## -- Step 7: Create data set of results from [model type].results.data() formatted for table ------
+results.table <- function(outcome = c('adl', 'faq', 'rbans', 'trailb')){
+  if(outcome %in% c('adl', 'faq')){
+    results.data <- nb.results.data(outcome)
+  } else if(outcome %in% c('rbans', 'trailb')){
+    results.data <- ols.results.data(outcome)
+  }
+  
+  results.data <- results.data %>%
+    dplyr::select(time.f, version.f, comp.str, peci.str, pval.str) %>%
     gather(key = quant, value = quantity, comp.str:pval.str) %>%
     mutate(quant = ifelse(version.f == 'With IL-6',
                           paste0(quant, '.il6'),
                           paste0(quant, '.noil6'))) %>%
     dplyr::select(-version.f) %>%
     spread(key = quant, value = quantity)
-  irrp.data[,c('time.f',
-               'comp.str.il6', 'irrci.str.il6', 'pval.str.il6',
-               'comp.str.noil6', 'irrci.str.noil6', 'pval.str.noil6')]
+  results.data[,c('time.f',
+                  'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                  'comp.str.noil6', 'peci.str.noil6', 'pval.str.noil6')]
 }
 
 ## -- Function to create a table showing missingness for each covariate in a model -----------------
@@ -825,7 +874,7 @@ adl.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('adl.12', lt.noil6.r
 
 ## -- Calculate and plot predicted values ----------------------------------------------------------
 adl.nutric.plot <- create.nutric.plot.nb('adl')
-adl.nutric.table <- nb.results.table('adl')
+adl.nutric.table <- results.table('adl')
 adl.missing.table <- nb.missing.table('adl')
 
 @
@@ -847,15 +896,15 @@ percentile) had on average an ADL score that was 50\% higher than someone with a
 percentile).
   
 <<printadlmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Katz ADL Scores at 3 \\& 12 Months'>>=
-latex(adl.nutric.table[,c('time.f', 'comp.str.il6',
-                          'irrci.str.il6', 'pval.str.il6',
-                          'irrci.str.noil6', 'pval.str.noil6')],
+latex(adl.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                          'peci.str.noil6', 'pval.str.noil6')],
       file = '',
       where = '!h',
       caption = 'NUTRIC Score at ICU Admission vs Katz ADL Scores at 3 \\& 12 Months',
       label = 'table:adlresults',
       rowname = NULL,
-      colheads = c('Followup Time', 'NUTRIC Score Comparison*', rep(c('IRR (95\\% CI)', 'P-Value'), 2)),
+      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
+                   rep(c('IRR (95\\% CI)', 'P-Value'), 2)),
       col.just = c('l', rep('r', 5)),
       cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
       n.cgroup = c(2, 2, 2),
@@ -903,7 +952,7 @@ faq.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('faq.12', lt.noil6.r
 
 ## -- Calculate and plot predicted values ----------------------------------------------------------
 faq.nutric.plot <- create.nutric.plot.nb('faq')
-faq.nutric.table <- nb.results.table('faq')
+faq.nutric.table <- results.table('faq')
 faq.missing.table <- nb.missing.table('faq')
 
 @
@@ -923,15 +972,15 @@ percentile) had on average an FAQ score that was 50\% higher than someone with a
 percentile).
   
 <<printfaqmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs IADLs (FAQ Scores) at 3 \\& 12 Months'>>=
-latex(faq.nutric.table[,c('time.f', 'comp.str.il6',
-                          'irrci.str.il6', 'pval.str.il6',
-                          'irrci.str.noil6', 'pval.str.noil6')],
+latex(faq.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                          'peci.str.noil6', 'pval.str.noil6')],
       file = '',
       where = '!h',
       caption = 'NUTRIC Score at ICU Admission vs IADLs (FAQ Scores) at 3 \\& 12 Months',
       label = 'table:faqresults',
       rowname = NULL,
-      colheads = c('Followup Time', 'NUTRIC Score Comparison*', rep(c('IRR (95\\% CI)', 'P-Value'), 2)),
+      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
+                   rep(c('IRR (95\\% CI)', 'P-Value'), 2)),
       col.just = c('l', rep('r', 5)),
       cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
       n.cgroup = c(2, 2, 2),
@@ -949,6 +998,54 @@ latex(faq.missing.table,
       col.just = rep('c', 4),
       cgroup = c('3 Months', '12 Months'),
       n.cgroup = c(2, 2))
+
+@
+
+\section{NUTRIC Scores vs Global Cognition (RBANS Global)}
+<<rbansmodels>>=
+ddvars <- c(lt.covars, 'nutric.il6', 'nutric.noil6',
+            paste0('rbans.global.', c(3, 12)), paste0('trail.b.', c(3, 12)))
+dd.il6.3 <- datadist(subset(brain.oneobs, cohort.3m.il6)[,ddvars])
+dd.noil6.3 <- datadist(subset(brain.oneobs, cohort.3m)[,ddvars])
+dd.il6.12 <- datadist(subset(brain.oneobs, cohort.12m.il6)[,ddvars])
+dd.noil6.12 <- datadist(subset(brain.oneobs, cohort.12m)[,ddvars])
+
+## -- Fit models -----------------------------------------------------------------------------------
+rbans.il6.3 <- fit.mult.impute(as.formula(paste('rbans.global.3', lt.il6.rh, sep = ' ~ ')),
+                               fitter = ols,
+                               xtrans = mice.il6.3,
+                               data = subset(brain.oneobs, cohort.3m.il6))
+rbans.noil6.3 <- fit.mult.impute(as.formula(paste('rbans.global.3', lt.noil6.rh, sep = ' ~ ')),
+                                 fitter = ols,
+                                 xtrans = mice.noil6.3,
+                                 data = subset(brain.oneobs, cohort.3m))
+rbans.il6.12 <- fit.mult.impute(as.formula(paste('rbans.global.12', lt.il6.rh, sep = ' ~ ')),
+                                fitter = ols,
+                                xtrans = mice.il6.12,
+                                data = subset(brain.oneobs, cohort.12m.il6))
+rbans.noil6.12 <- fit.mult.impute(as.formula(paste('rbans.global.12', lt.noil6.rh, sep = ' ~ ')),
+                                  fitter = ols,
+                                  xtrans = mice.noil6.12,
+                                  data = subset(brain.oneobs, cohort.12m))
+
+## -- Calculate differences + CIs, predicted values ------------------------------------------------
+options(datadist = 'dd.il6.3')
+rbans.sum.il6.3 <- summary(rbans.il6.3)
+rbans.pred.il6.3 <- Predict(rbans.il6.3, nutric.il6 = NA)
+
+options(datadist = 'dd.noil6.3')
+rbans.sum.noil6.3 <- summary(rbans.noil6.3)
+rbans.pred.noil6.3 <- Predict(rbans.noil6.3, nutric.noil6 = NA)
+
+options(datadist = 'dd.il6.12')
+rbans.sum.il6.12 <- summary(rbans.il6.12)
+rbans.pred.il6.12 <- Predict(rbans.il6.12, nutric.il6 = NA)
+
+options(datadist = 'dd.noil6.12')
+rbans.sum.noil6.12 <- summary(rbans.noil6.12)
+rbans.pred.noil6.12 <- Predict(rbans.noil6.12, nutric.noil6 = NA)
+
+rbans.nutric.table <- results.table('rbans')
 
 @
 
