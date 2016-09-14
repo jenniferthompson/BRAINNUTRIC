@@ -125,10 +125,10 @@ fu.outcomes <- brain.fu %>%
   separate(fu.period, into = c('month', 'toss')) %>%
   dplyr::select(id, month, rbans.global.score, trail.b.tscore, faq.rdscore, adl.totscore,
                 sf36.pcs, sf36.mcs) %>%
-  gather(key = test, value = score, rbans.global.score:sf36.mcs) %>%
-  mutate(test.time = paste(gsub('\\.[a-z]*score$', '', test), month, sep = '.')) %>%
-  dplyr::select(id, test.time, score) %>%
-  spread(key = test.time, value = score)
+  gather(key = outcome, value = score, rbans.global.score:sf36.mcs) %>%
+  mutate(outcome.time = paste(gsub('\\.[a-z]*score$', '', outcome), month, sep = '.')) %>%
+  dplyr::select(id, outcome.time, score) %>%
+  spread(key = outcome.time, value = score)
 
 brain.oneobs <- merge(brain.oneobs, fu.outcomes, by = 'id', all = TRUE)
 
@@ -584,11 +584,11 @@ calc.nbresults <- function(nbobj,          ## negbin model object (from glm.nb()
 
 ## -- Step 3: Project-specific function to create data frame of predicted values for 3/12m, --------
 ## -- NUTRIC with/without IL-6 ---------------------------------------------------------------------
-create.nb.preddata <- function(test = c('adl', 'faq')){
-  mod.il6.3 <- get(paste0(test, '.il6.3'))
-  mod.noil6.3 <- get(paste0(test, '.noil6.3'))
-  mod.il6.12 <- get(paste0(test, '.il6.12'))
-  mod.noil6.12 <- get(paste0(test, '.noil6.12'))
+create.nb.preddata <- function(outcome = c('adl', 'faq')){
+  mod.il6.3 <- get(paste0(outcome, '.il6.3'))
+  mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
+  mod.il6.12 <- get(paste0(outcome, '.il6.12'))
+  mod.noil6.12 <- get(paste0(outcome, '.noil6.12'))
   
   pred.il6.3 <-
     calc.nbresults(nbobj = mod.il6.3, designmat = lt.designmat.il6, xvar = 'nutric.il6')
@@ -616,15 +616,15 @@ create.nb.preddata <- function(test = c('adl', 'faq')){
 
 ## -- Step 4: Create plot of predicted ADL/FAQ scores vs NUTRIC scores -----------------------------
 ## -- Both versions and both times in a single plot ------------------------------------------------
-create.nutric.plot.nb <- function(test = c('adl', 'faq')){
+create.nutric.plot.nb <- function(outcome = c('adl', 'faq')){
   ## Get data set of predicted values for each time/version combination
-  preddata <- create.nb.preddata(test)
+  preddata <- create.nb.preddata(outcome)
   
   ## Set Y axis label
-  if(test == 'adl'){
-    test.ylab <- 'Katz ADL'
+  if(outcome == 'adl'){
+    outcome.ylab <- 'Katz ADL'
   } else{
-    test.ylab <- 'FAQ'
+    outcome.ylab <- 'FAQ'
   }
   
   ## Create plot, faceted by NUTRIC version and followup time, set to Nate's preferred aesthetic
@@ -632,7 +632,7 @@ create.nutric.plot.nb <- function(test = c('adl', 'faq')){
     facet_grid(time.f ~ version.f) +
     scale_x_continuous(breaks = seq(0, max(preddata$xvalue), 1),
                        name = 'NUTRIC Score at ICU Admission') +
-    scale_y_continuous(name = paste('Adjusted', test.ylab, 'Score')) +
+    scale_y_continuous(name = paste('Adjusted', outcome.ylab, 'Score')) +
     geom_pointrange(colour = "#003D79") +
     theme_bw()
   
@@ -818,11 +818,11 @@ results.table <- function(outcome = c('adl', 'faq', 'rbans', 'trailb')){
 }
 
 ## -- Function to create a table showing missingness for each covariate in a model -----------------
-nb.missing.table <- function(test = c('adl', 'faq')){
-  nmis.3m.il6 <- get(paste0(test, '.il6.3'))$nmis
-  nmis.3m.noil6 <- get(paste0(test, '.noil6.3'))$nmis
-  nmis.12m.il6 <- get(paste0(test, '.il6.12'))$nmis
-  nmis.12m.noil6 <- get(paste0(test, '.noil6.12'))$nmis
+nb.missing.table <- function(outcome = c('adl', 'faq')){
+  nmis.3m.il6 <- get(paste0(outcome, '.il6.3'))$nmis
+  nmis.3m.noil6 <- get(paste0(outcome, '.noil6.3'))$nmis
+  nmis.12m.il6 <- get(paste0(outcome, '.il6.12'))$nmis
+  nmis.12m.noil6 <- get(paste0(outcome, '.noil6.12'))$nmis
   names(nmis.3m.il6) <- gsub('\\.[no]*il6', '', gsub('\\.3', '.lt', names(nmis.3m.il6)))
   names(nmis.3m.noil6) <- gsub('\\.[no]*il6', '', gsub('\\.3', '.lt', names(nmis.3m.noil6)))
   names(nmis.12m.il6) <- gsub('\\.[no]*il6', '', gsub('\\.12', '.lt', names(nmis.12m.il6)))
@@ -840,7 +840,7 @@ nb.missing.table <- function(test = c('adl', 'faq')){
   miss.data$npct.12m.il6 <- with(miss.data, paste0(pctmis.12m.il6, '\\% (', nmis.12m.il6, ')'))
   miss.data$npct.12m.noil6 <- with(miss.data, paste0(pctmis.12m.noil6, '\\% (', nmis.12m.noil6, ')'))
   
-  miss.data[rownames(miss.data) %in% c(lt.covars, 'nutric', paste0(test, '.lt')), 9:12]
+  miss.data[rownames(miss.data) %in% c(lt.covars, 'nutric', paste0(outcome, '.lt')), 9:12]
 }
 
 
