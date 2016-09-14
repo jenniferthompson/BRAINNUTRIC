@@ -584,6 +584,7 @@ calc.nbresults <- function(nbobj,          ## negbin model object (from glm.nb()
 
 ## -- Step 3: Project-specific function to create data frame of predicted values for 3/12m, --------
 ## -- NUTRIC with/without IL-6 ---------------------------------------------------------------------
+## -- Negative binomial models ---------------------------------------------------------------------
 create.nb.preddata <- function(outcome = c('adl', 'faq')){
   mod.il6.3 <- get(paste0(outcome, '.il6.3'))
   mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
@@ -614,25 +615,70 @@ create.nb.preddata <- function(outcome = c('adl', 'faq')){
   
 }
 
+## -- Linear regression (ols) models ---------------------------------------------------------------
+create.ols.preddata <- function(outcome = c('rbans', 'trailb')){
+  mod.il6.3 <- get(paste0(outcome, '.il6.3'))
+  mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
+  mod.il6.12 <- get(paste0(outcome, '.il6.12'))
+  mod.noil6.12 <- get(paste0(outcome, '.noil6.12'))
+  
+  pred.il6.3 <- as.data.frame(Predict(mod.il6.3, nutric.il6 = NA))
+  names(pred.il6.3)[grep('^nutric', names(pred.il6.3))] <- 'xvalue'
+  pred.noil6.3 <- as.data.frame(Predict(mod.noil6.3, nutric.noil6 = NA))
+  names(pred.noil6.3)[grep('^nutric', names(pred.noil6.3))] <- 'xvalue'
+  pred.il6.12 <- as.data.frame(Predict(mod.il6.12, nutric.il6 = NA))
+  names(pred.il6.12)[grep('^nutric', names(pred.il6.12))] <- 'xvalue'
+  pred.noil6.12 <- as.data.frame(Predict(mod.noil6.12, nutric.noil6 = NA))
+  names(pred.noil6.12)[grep('^nutric', names(pred.noil6.12))] <- 'xvalue'
+  
+  pred.il6.3$time <- pred.noil6.3$time <- 1
+  pred.il6.12$time <- pred.noil6.12$time <- 2
+  
+  pred.il6.3$version <- pred.il6.12$version <- 1
+  pred.noil6.3$version <- pred.noil6.12$version <- 2
+  
+  pred.data <- rbind(pred.il6.3, pred.il6.12, pred.noil6.3, pred.noil6.12)
+  pred.data$time.f <- factor(pred.data$time, levels = 1:2, labels = c('3 Months', '12 Months'))
+  pred.data$version.f <-
+    factor(pred.data$version, levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  
+  pred.data
+  
+}
+
 ## -- Step 4: Create plot of predicted ADL/FAQ scores vs NUTRIC scores -----------------------------
 ## -- Both versions and both times in a single plot ------------------------------------------------
-create.nutric.plot.nb <- function(outcome = c('adl', 'faq')){
-  ## Get data set of predicted values for each time/version combination
-  preddata <- create.nb.preddata(outcome)
-  
-  ## Set Y axis label
-  if(outcome == 'adl'){
-    outcome.ylab <- 'Katz ADL'
-  } else{
-    outcome.ylab <- 'FAQ'
+## Create data frame of Y axis labels
+yaxis.labels <- data.frame(outcome = c('adl', 'faq', 'rbans', 'trailb'),
+                           ylabel = c('Katz ADL Score', 'FAQ Score', 'RBANS Global Score',
+                                      'Trails B Score'))
+
+## Plotting function
+create.nutric.plot <- function(outcome = c('adl', 'faq', 'rbans', 'trailb')){
+  ## Get data set of predicted values for each time/version combination; set variable names
+  if(outcome %in% c('adl', 'faq')){
+    preddata <- create.nb.preddata(outcome)
+    x.var <- 'xvalue'
+    y.var <- 'count.pe'
+    ymin.var <- 'count.lcl'
+    ymax.var <- 'count.ucl'
+  } else if(outcome %in% c('rbans', 'trailb')){
+    preddata <- create.ols.preddata(outcome)
+    x.var <- 'xvalue'
+    y.var <- 'yhat'
+    ymin.var <- 'lower'
+    ymax.var <- 'upper'
   }
   
+  ## Set Y axis label
+  outcome.ylab <- yaxis.labels[match(outcome, yaxis.labels$outcome), 'ylabel']
+
   ## Create plot, faceted by NUTRIC version and followup time, set to Nate's preferred aesthetic
-  ggplot(data = preddata, aes(x = xvalue, y = count.pe, ymin = count.lcl, ymax = count.ucl)) +
+  ggplot(data = preddata, aes_string(x = x.var, y = y.var, ymin = ymin.var, ymax = ymax.var)) +
     facet_grid(time.f ~ version.f) +
     scale_x_continuous(breaks = seq(0, max(preddata$xvalue), 1),
                        name = 'NUTRIC Score at ICU Admission') +
-    scale_y_continuous(name = paste('Adjusted', outcome.ylab, 'Score')) +
+    scale_y_continuous(name = paste('Adjusted', outcome.ylab)) +
     geom_pointrange(colour = "#003D79") +
     theme_bw()
   
@@ -873,7 +919,7 @@ adl.il6.12 <- with(mice.il6.12, glm.nb(as.formula(paste('adl.12', lt.il6.rh, sep
 adl.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('adl.12', lt.noil6.rh, sep = ' ~ '))))
 
 ## -- Calculate and plot predicted values ----------------------------------------------------------
-adl.nutric.plot <- create.nutric.plot.nb('adl')
+adl.nutric.plot <- create.nutric.plot('adl')
 adl.nutric.table <- results.table('adl')
 adl.missing.table <- nb.missing.table('adl')
 
@@ -951,7 +997,7 @@ faq.il6.12 <- with(mice.il6.12, glm.nb(as.formula(paste('faq.12', lt.il6.rh, sep
 faq.noil6.12 <- with(mice.noil6.12, glm.nb(as.formula(paste('faq.12', lt.noil6.rh, sep = ' ~ '))))
 
 ## -- Calculate and plot predicted values ----------------------------------------------------------
-faq.nutric.plot <- create.nutric.plot.nb('faq')
+faq.nutric.plot <- create.nutric.plot('faq')
 faq.nutric.table <- results.table('faq')
 faq.missing.table <- nb.missing.table('faq')
 
@@ -1045,6 +1091,7 @@ options(datadist = 'dd.noil6.12')
 rbans.sum.noil6.12 <- summary(rbans.noil6.12)
 rbans.pred.noil6.12 <- Predict(rbans.noil6.12, nutric.noil6 = NA)
 
+rbans.nutric.plot <- create.nutric.plot('rbans')
 rbans.nutric.table <- results.table('rbans')
 
 @
