@@ -188,8 +188,9 @@ allmort.Surv <-
   with(brain.oneobs, Surv(time = days.deathlast.365, event = as.numeric(died.brain.365)))
 
 ## Create plot
-## values = c('#b70808', '#003D79')
-ggsurv(survfit(allmort.Surv ~ 1), surv.col = '#003D79', cens.col = '#b70808') +
+## '#003D79' = Nate's preferred navy
+## '#BA6E00' = complementary color to Nate's preferred navy per paletton.com
+ggsurv(survfit(allmort.Surv ~ 1), surv.col = '#003D79', cens.col = '#BA6E00') +
   scale_colour_manual(values = c('#003D79')) +
   scale_x_continuous(name = 'Days Since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
   scale_y_continuous('Probability Alive') +
@@ -270,7 +271,7 @@ nutric.scatter <- ggplot(data = subset(desc.data.all, !is.na(nutric.il6)),
            position = position_jitter(width = 0.75), alpha = 0.2) +
   scale_x_continuous(name = 'Full NUTRIC (Including IL-6)', limits = c(-0.5, 10.5), breaks = 0:10) +
   scale_y_continuous(name = 'Modified NUTRIC, Excluding IL-6', limits = c(-0.5, 9.5), breaks = 0:9) +
-  scale_colour_manual(name = 'Full NUTRIC = Modified NUTRIC', values = c('#b70808', '#003D79')) +
+  scale_colour_manual(name = 'Full NUTRIC = Modified NUTRIC', values = c('#BA6E00', '#003D79')) +
   theme_bw() +
   theme(legend.position = 'bottom', legend.direction = 'horizontal',
         legend.key.size = unit(0.4, 'cm'),
@@ -398,6 +399,10 @@ mice.il6.3 <- mice(data = modeldata.il6.3, m = 10, visitSequence = 'monotone', s
 mice.il6.12 <- mice(data = modeldata.il6.12, m = 10, visitSequence = 'monotone', seed = 56)
 mice.noil6.3 <- mice(data = modeldata.noil6.3, m = 10, visitSequence = 'monotone', seed = 56)
 mice.noil6.12 <- mice(data = modeldata.noil6.12, m = 10, visitSequence = 'monotone', seed = 56)
+
+## Percentiles of NUTRIC with and without IL-6 are extremely similar; include footnote in each
+## long-term results table to point out that this is not a typo/mistake
+nutric.note <- '\\emph{\\footnotesize{*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.}}'
 
 ## -- Functions for calculating & plotting results of negative binomial models ---------------------
 ## -- Step 1: Create design matrix for a given set of covariates -----------------------------------
@@ -881,27 +886,29 @@ missing.lt.info <- lapply(1:length(lt.mice),
                           FUN = function(m){ descmiss.mice(get(lt.mice[m]), lt.ns[m]) })
 missing.lt.df <- cbind(missing.lt.info[[1]]['varname'],
                        do.call(cbind, lapply(missing.lt.info, FUN = function(m){ m[,'npct'] })))
+rownames(missing.lt.df) <- missing.lt.df$varname
 
 @
 
 \clearpage
 \section{NUTRIC vs Long-Term Cognition and Disability}
 Results for the associations between NUTRIC scores and long-term cognitive and disability outcomes
-follow. Because all of these models have the same amount of missingness, missingness for each cohort
-is presented in Table \ref{table:ltmissing}.
+follow. Because all of the long-term outcome models have the same amounts of missingness,
+missingness for each cohort is presented in Table \ref{table:ltmissing}.
 
 <<printmissinglt, results = 'asis'>>=
-latex(missing.lt.df, file = '',
+latex(missing.lt.df[,2:5], file = '',
       title = '',
       where = '!h',
       caption = 'Missing Data for Long-Term Outcome Models',
       caption.lot = 'Missing Data for Long-Term Outcome Models',
       label = 'table:ltmissing',
-      rowname = NULL,
-      colheads = c('Variable', rep(c('With IL-6', 'Without IL-6'), 2)),
-      col.just = c('l', rep('c', 4)),
-      cgroup = c('', '3 Months', '12 Months'),
-      n.cgroup = c(1, 2, 2))
+      rgroup = c('Covariates', 'Outcomes'),
+      n.rgroup = c(13, 6),
+      colheads = rep(c('With IL-6', 'Without IL-6'), 2),
+      col.just = rep('c', 4),
+      cgroup = c('3 Months', '12 Months'),
+      n.cgroup = c(2, 2))
 
 @
 
@@ -966,7 +973,7 @@ latex(adl.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il
       col.just = c('l', rep('r', 5)),
       cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
       n.cgroup = c(2, 2, 2),
-      insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
+      insert.bottom = nutric.note)
 
 adl.nutric.plot
 
@@ -1031,7 +1038,7 @@ latex(faq.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il
       col.just = c('l', rep('r', 5)),
       cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
       n.cgroup = c(2, 2, 2),
-      insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
+      insert.bottom = nutric.note)
 
 faq.nutric.plot
 
@@ -1109,9 +1116,81 @@ latex(rbans.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.
       col.just = c('l', rep('r', 5)),
       cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
       n.cgroup = c(2, 2, 2),
-      insert.bottom = '*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.')
+      insert.bottom = nutric.note)
 
 rbans.nutric.plot
+
+@
+
+
+\clearpage
+\subsection{NUTRIC Scores vs Executive Function (Trails B)}
+<<trailbmodels>>=
+## -- Fit models -----------------------------------------------------------------------------------
+trailb.il6.3 <- fit.mult.impute(as.formula(paste('trail.b.3', lt.il6.rh, sep = ' ~ ')),
+                                fitter = ols,
+                                xtrans = mice.il6.3,
+                                data = subset(brain.oneobs, cohort.3m.il6))
+trailb.noil6.3 <- fit.mult.impute(as.formula(paste('trail.b.3', lt.noil6.rh, sep = ' ~ ')),
+                                  fitter = ols,
+                                  xtrans = mice.noil6.3,
+                                  data = subset(brain.oneobs, cohort.3m))
+trailb.il6.12 <- fit.mult.impute(as.formula(paste('trail.b.12', lt.il6.rh, sep = ' ~ ')),
+                                 fitter = ols,
+                                 xtrans = mice.il6.12,
+                                 data = subset(brain.oneobs, cohort.12m.il6))
+trailb.noil6.12 <- fit.mult.impute(as.formula(paste('trail.b.12', lt.noil6.rh, sep = ' ~ ')),
+                                   fitter = ols,
+                                   xtrans = mice.noil6.12,
+                                   data = subset(brain.oneobs, cohort.12m))
+
+## -- Calculate differences + CIs, predicted values ------------------------------------------------
+options(datadist = 'dd.il6.3')
+trailb.sum.il6.3 <- summary(trailb.il6.3)
+trailb.pred.il6.3 <- Predict(trailb.il6.3, nutric.il6 = NA)
+
+options(datadist = 'dd.noil6.3')
+trailb.sum.noil6.3 <- summary(trailb.noil6.3)
+trailb.pred.noil6.3 <- Predict(trailb.noil6.3, nutric.noil6 = NA)
+
+options(datadist = 'dd.il6.12')
+trailb.sum.il6.12 <- summary(trailb.il6.12)
+trailb.pred.il6.12 <- Predict(trailb.il6.12, nutric.il6 = NA)
+
+options(datadist = 'dd.noil6.12')
+trailb.sum.noil6.12 <- summary(trailb.noil6.12)
+trailb.pred.noil6.12 <- Predict(trailb.noil6.12, nutric.noil6 = NA)
+
+trailb.nutric.plot <- create.nutric.plot('trailb')
+trailb.nutric.table <- results.table('trailb')
+
+@
+
+We see no meaningful association between NUTRIC score at baseline and Trails B t-scores at either
+followup time.
+
+Figure \ref{fig:printtrailbmodels} shows the full relationships between baseline NUTRIC score and
+followup Trails B scores. Table \ref{table:trailbresults} shows p-values for the total association
+of NUTRIC score with FAQ score and adjusted differences in RBANS scores between the 75th and the
+25th percentiles of our population's NUTRIC scores.
+  
+<<printtrailbmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Executive Function (Trails B T-Scores) at 3 \\& 12 Months'>>=
+latex(trailb.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                            'peci.str.noil6', 'pval.str.noil6')],
+      file = '',
+      where = '!h',
+      caption = 'NUTRIC Score at ICU Admission vs Executive Function (Trails B T-Scores) at 3 \\& 12 Months',
+      caption.lot = 'NUTRIC vs Executive Function (Trails B T-Scores)',
+      label = 'table:trailbresults',
+      rowname = NULL,
+      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
+                   rep(c('Difference (95\\% CI)', 'P-Value'), 2)),
+      col.just = c('l', 'c', rep('r', 4)),
+      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+      n.cgroup = c(2, 2, 2),
+      insert.bottom = nutric.note)
+
+trailb.nutric.plot
 
 @
 
