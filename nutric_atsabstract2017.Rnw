@@ -35,11 +35,14 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(GGally) ## for ggsurv()
+library(zoo) ## for na.locf
 
 if(Sys.info()['sysname'] == 'Darwin'){
   load('/Volumes/thomps23/ICUDelirium/BRAINICU/braindata.Rdata')
+  source('/Volumes/thomps23/ICUDelirium/timevarying_data.r')
 } else{
   load('/home/thomps23/ICUDelirium/BRAINICU/braindata.Rdata')
+  source('/home/thomps23/ICUDelirium/timevarying_data.r')
 }
 
 ## Method to use in pool.compare() for getting p-values from imputed negative binomial models
@@ -81,9 +84,24 @@ brain.oneobs$cohort.allpts <- with(brain.oneobs, {
                          '4. N/A Study Staff Withdrew Patient')) })
 n.allpts <- sum(brain.oneobs$cohort.allpts)
 
+## All patients who can be included in in-hospital mortality (exclude anyone who never had
+## mental status measured)
+no.mental.data <- brain.daily %>%
+  group_by(id) %>%
+  summarise(n.mental = sum(!is.na(mental.stat.imp))) %>%
+  filter(n.mental == 0)
+no.mental.pts <- no.mental.data$id
+n.nomental <- length(no.mental.pts)
+
+brain.oneobs$cohort.inhosp <- with(brain.oneobs, cohort.allpts & !(id %in% no.mental.pts))
+n.inhosp <- sum(brain.oneobs$cohort.inhosp)
+
 ## All patients with usable data and a full NUTRIC score at baseline
 brain.oneobs$cohort.allpts.il6 <- with(brain.oneobs, cohort.allpts & !is.na(nutric.il6))
+brain.oneobs$cohort.inhosp.il6 <- with(brain.oneobs, cohort.inhosp & !is.na(nutric.il6))
+
 n.allpts.il6 <- sum(brain.oneobs$cohort.allpts.il6)
+n.inhosp.il6 <- sum(brain.oneobs$cohort.inhosp.il6)
 
 ## All hospital survivors who remained in study
 brain.oneobs$cohort.survivors <- with(brain.oneobs, {
@@ -144,20 +162,23 @@ brain.oneobs$nutric.atrisk.noil6 <- with(brain.oneobs, factor(ifelse(is.na(nutri
                                                               labels = c('No', 'Yes')))
 
 ## -- Create a table of the number of patients in each cohort --------------------------------------
-cohort.ns <- data.frame(cohort = c('In-hospital mortality',
+cohort.ns <- data.frame(cohort = c('Enrolled patients',
+                                   'In-hospital mortality',
                                    'Discharge location and long-term mortality',
                                    'Long-term cognitive and disability',
                                    '~~~3 months',
                                    '~~~12 months'),
-                        n.il6 = c(n.allpts.il6, n.survivors.il6, n.lt.il6, n.3m.il6, n.12m.il6),
-                        n.noil6 = c(n.allpts, n.survivors, n.lt, n.3m, n.12m))
+                        n.il6 = c(n.allpts.il6, n.inhosp.il6, n.survivors.il6,
+                                  n.lt.il6, n.3m.il6, n.12m.il6),
+                        n.noil6 = c(n.allpts, n.inhosp, n.survivors, n.lt, n.3m, n.12m))
 
 @
 
-There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. Table
-\ref{table:ncohort} describes the number of patients included in each analysis. We will not impute
-missing NUTRIC scores due to the involvement of IL-6; therefore different numbers of patients will
-be included in models using the full vs. the modified NUTRIC score.
+There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. Of these, \Sexpr{n.nomental} patients never had a mental status measured and could not be included in
+time-varying analyses for in-hospital mortality. Table \ref{table:ncohort} describes the number of
+patients included in each analysis. We will not impute missing NUTRIC scores due to the involvement
+of IL-6; therefore different numbers of patients will be included in models using the full vs. the
+modified NUTRIC score.
 
 <<printncohort, results = 'asis'>>=
 latex(cohort.ns, file = '',
@@ -352,8 +373,8 @@ were 0).
   \begin{itemize}
   \item Mean modified daily SOFA in ICU (nonlinear) (\emph{in-hospital death: daily modified SOFA})
   \item Duration of severe sepsis (nonlinear) (\emph{in-hospital death: daily severe sepsis})
-  \item Duration of delirium (nonlinear) (\emph{in-hospital death: daily delirium})
-  \item Duration of coma (nonlinear) (\emph{in-hospital death: daily coma})
+  \item Duration of delirium (nonlinear) (\emph{in-hospital death: daily mental status})
+  \item Duration of coma (nonlinear) (\emph{in-hospital death: daily mental status})
   \item Duration of mechanical ventilation (nonlinear) (\emph{in-hospital death: daily MV})
   \end{itemize}
 \end{itemize}
@@ -362,11 +383,72 @@ were 0).
 ## Create numeric version of baseline frailty
 brain.oneobs$frailty.num <- as.numeric(gsub('\\..*$', '', brain.oneobs$frailty))
 
-## -- Long-term cognitive and disability outcomes --------------------------------------------------
+## -- In-hospital mortality ------------------------------------------------------------------------
+## Impute sepsis at admission for patients missing day 1 sepsis
+sepsis.adm.pts <- subset(brain.oneobs, sepsis.adm == 'Sepsis at admission')$id
+brain.daily <- brain.daily %>%
+  group_by(id) %>%
+  mutate(sevsepsis.base = factor(ifelse(study.day == 1 &
+                                          is.na(sevsepsis.l24) & id %in% sepsis.adm.pts, 2,
+                                 ifelse(study.day == 1 & is.na(sevsepsis.l24), 1,
+                                 ifelse(is.na(sevsepsis.l24), NA,
+                                 ifelse(sevsepsis.l24 == 'Not severely septic today', 1, 2)))),
+                                 levels = 1:2, labels = c('No sepsis', 'Sepsis')),
+         sevsepsis.imp = zoo::na.locf(sevsepsis.base)) %>%
+  ungroup()
+brain.daily <- as.data.frame(brain.daily)
+
+## Create time-varying data sets
+death.inhosp.vars.tv <- c('daily.sofa.mod.locf', 'sevsepsis.imp', 'mental.stat.imp', 'on.vent.l24')
+
+death.inhosp.orgdata <- brain.daily[brain.daily$id %in% subset(brain.oneobs, cohort.inhosp)$id,
+                                    c('id', 'study.day', death.inhosp.vars.tv)]
+
+death.inhosp.data <- timevarying.data(org.data = death.inhosp.orgdata,
+                                      time.var = 'days.deathlast.inhosp.s',
+                                      event.var = 'died.inhosp.s',
+                                      event.string = 'Died in hospital during study period',
+                                      data.set = brain.oneobs)
+
+death.inhosp.vars.base <-
+  c('edu', 'frailty.num', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e')
+
+death.inhosp.noil6.data <- left_join(death.inhosp.data,
+                                     brain.oneobs[,c('id', death.inhosp.vars.base, 'nutric.noil6')],
+                                     by = 'id')
+death.inhosp.il6.data <-
+  left_join(subset(death.inhosp.data, id %in% subset(brain.oneobs, cohort.inhosp.il6)$id),
+            brain.oneobs[,c('id', death.inhosp.vars.base, 'nutric.il6')],
+            by = 'id')
+
+## Imputation for in-hospital mortality
+mice.il6.inhosp <- mice(data = death.inhosp.il6.data, m = 10, visitSequence = 'monotone', seed = 56)
+mice.noil6.inhosp <-
+  mice(data = death.inhosp.noil6.data, m = 10, visitSequence = 'monotone', seed = 56)
+
+## -- Long-term mortality and discharge location (hospital survivor cohorts) -----------------------
 ## List of model covariates for long-term outcomes
 lt.covars <- c('edu', 'frailty.num', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e',
                'mean.modsofa.icu', 'icudays.sevseptic.s', 'del.s.imp', 'coma.s.imp',
                'vent.los.tot.s')
+
+## Create data sets for discharge location and long-term mortality analyses
+modeldata.il6.survivors <- brain.oneobs[brain.oneobs$cohort.survivors.il6,
+                                        c(lt.covars, 'nutric.il6', 'hospdis.loc',
+                                          'days.deathlast.90', 'died.brain.90',
+                                          'days.deathlast.365', 'died.brain.365')]
+modeldata.noil6.survivors <- brain.oneobs[brain.oneobs$cohort.survivors,
+                                          c(lt.covars, 'nutric.noil6', 'hospdis.loc',
+                                            'days.deathlast.90', 'died.brain.90',
+                                            'days.deathlast.365', 'died.brain.365')]
+
+## Create mice objects for imputation
+mice.il6.survivors <-
+  mice(data = modeldata.il6.survivors, m = 10, visitSequence = 'monotone', seed = 56)
+mice.noil6.survivors <-
+  mice(data = modeldata.noil6.survivors, m = 10, visitSequence = 'monotone', seed = 56)
+
+## -- Long-term cognitive and disability outcomes --------------------------------------------------
 
 ## Righthand side of formula without any NUTRIC score - to use in pool.compare()
 lt.nonutric.rh <- 'rcs(edu, 3) + frailty.num + sex.pp + rcs(bmi, 3) + iqcode.score.e + adl.e + rcs(faq.e, 3) + rcs(mean.modsofa.icu, 3) + rcs(icudays.sevseptic.s, 3) + rcs(del.s.imp, 3) + rcs(coma.s.imp, 3) + rcs(vent.los.tot.s, 3)'
@@ -878,6 +960,20 @@ descmiss.mice <- function(miceobj, cohortn){
   data.frame(varname = varnames, npct = npctmiss, stringsAsFactors = FALSE)
 }
 
+## Create table for outcomes using hospital survivors
+survivors.mice <- c('mice.il6.survivors', 'mice.noil6.survivors')
+survivors.ns <- c(n.survivors.il6, n.survivors)
+
+missing.survivors.info <- lapply(1:length(survivors.mice),
+                                 FUN = function(m){ descmiss.mice(get(survivors.mice[m]),
+                                                                  survivors.ns[m]) })
+missing.survivors.df <- cbind(missing.survivors.info[[1]]['varname'],
+                              do.call(cbind, lapply(missing.survivors.info,
+                                                    FUN = function(m){ m[,'npct'] })))
+missing.survivors.df <-
+  subset(missing.survivors.df, !(varname %in% c('days.deathlast', 'died.brain')))
+rownames(missing.survivors.df) <- missing.survivors.df$varname
+
 ## Create table for all long-term outcomes (same amount of missingness in each)
 lt.mice <- c('mice.il6.3', 'mice.noil6.3', 'mice.il6.12', 'mice.noil6.12')
 lt.ns <- c(n.3m.il6, n.3m, n.12m.il6, n.12m)
@@ -889,6 +985,12 @@ missing.lt.df <- cbind(missing.lt.info[[1]]['varname'],
 rownames(missing.lt.df) <- missing.lt.df$varname
 
 @
+
+\clearpage
+\section{NUTRIC vs Mortality}
+Results for the associations between NUTRIC scores and mortality at three time points follow. All
+models are Cox proportional hazards models using multiple imputation; missingness for both
+in-hospital (all patients) and long-term mortality (hospital survivors) models are shown in Table \ref{table:deathmissing}.
 
 \clearpage
 \section{NUTRIC vs Long-Term Cognition and Disability}
