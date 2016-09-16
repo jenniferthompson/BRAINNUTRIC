@@ -741,12 +741,13 @@ create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'mort')){
 ## -- Step 4: Create plot of predicted ADL/FAQ scores vs NUTRIC scores -----------------------------
 ## -- Both versions and both times in a single plot ------------------------------------------------
 ## Create data frame of Y axis labels
-yaxis.labels <- data.frame(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort'),
+yaxis.labels <- data.frame(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort', 'dchome'),
                            ylabel = c('Katz ADL Score', 'FAQ Score', 'RBANS Global Score',
-                                      'Trails B Score', 'Hazard of Death'))
+                                      'Trails B Score', 'Hazard of Death',
+                                      'Probability of Discharge to Non-Home'))
 
 ## Plotting function
-create.nutric.plot <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort')){
+create.nutric.plot <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort', 'dchome')){
   ## Get data set of predicted values for each time/version combination; set variable names
   if(outcome %in% c('adl', 'faq')){
     preddata <- create.nb.preddata(outcome)
@@ -754,7 +755,7 @@ create.nutric.plot <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltm
     y.var <- 'count.pe'
     ymin.var <- 'count.lcl'
     ymax.var <- 'count.ucl'
-  } else if(outcome %in% c('rbans', 'trailb', 'ltmort')){
+  } else if(outcome %in% c('rbans', 'trailb', 'ltmort', 'dchome')){
     preddata <- create.rms.preddata(outcome)
     x.var <- 'xvalue'
     y.var <- 'yhat'
@@ -1000,6 +1001,71 @@ rownames(missing.lt.df) <- missing.lt.df$varname
 @
 
 \clearpage
+\section{NUTRIC vs Hospital Discharge Location}
+<<dchomemodels>>=
+## -- Run models -----------------------------------------------------------------------------------
+dchome.il6 <- fit.mult.impute(as.formula(paste('dc.home', lt.il6.rh, sep = ' ~ ')),
+                              fitter = lrm,
+                              xtrans = mice.il6.survivors,
+                              data = modeldata.il6.survivors)
+
+dchome.noil6 <- fit.mult.impute(as.formula(paste('dc.home', lt.noil6.rh, sep = ' ~ ')),
+                                fitter = lrm,
+                                xtrans = mice.noil6.survivors,
+                                data = modeldata.noil6.survivors)
+
+## -- Calculate ORs + CIs, predicted values --------------------------------------------------------
+## datadist() setup
+## n.unique set to 11 so that all NUTRIC scores are predicted as integers (no trying to use 7.82...)
+ddvars <- c(lt.covars, 'nutric.il6', 'nutric.noil6',
+            paste0('rbans.global.', c(3, 12)), paste0('trail.b.', c(3, 12)), 'dc.home')
+dd.il6.survivors <- datadist(subset(brain.oneobs, cohort.survivors.il6)[,ddvars], n.unique = 11)
+dd.noil6.survivors <- datadist(subset(brain.oneobs, cohort.survivors)[,ddvars], n.unique = 11)
+
+options(datadist = 'dd.il6.survivors')
+dchome.sum.il6 <- summary(dchome.il6)
+dchome.pred.il6 <- Predict(dchome.il6, nutric.il6 = NA, fun = exp)
+
+options(datadist = 'dd.noil6.survivors')
+dchome.sum.noil6 <- summary(dchome.noil6)
+dchome.pred.noil6 <- Predict(dchome.noil6, nutric.noil6 = NA, fun = exp)
+
+# dchome.nutric.plot <- create.nutric.plot('dchome')
+# dchome.nutric.table <- results.table('dchome')
+
+@
+
+To examine the association between NUTRIC scores and discharge location among hospital survivors,
+we used logistic regression (outcome = home vs not home).
+
+There is a strong association between higher NUTRIC scores, with or without IL-6, at baseline and
+increased odds of being discharged to somewhere other than home.
+
+Table \ref{table:dchomeresults} shows p-values for the total association of NUTRIC score with
+discharge location and odds ratios comparing the 75th to the 25th percentiles of our population's
+NUTRIC scores.
+  
+%' <<printdchomemodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home'>>=
+%' latex(dchome.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+%'                              'peci.str.noil6', 'pval.str.noil6')],
+%'       file = '',
+%'       where = '!h',
+%'       caption = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home',
+%'       caption.lot = 'NUTRIC vs Discharge Location',
+%'       label = 'table:dchomeresults',
+%'       rowname = NULL,
+%'       colheads = c('Followup Time', 'NUTRIC Score Comparison*',
+%'                    rep(c('HR (95\\% CI)', 'P-Value'), 2)),
+%'       col.just = c('l', 'c', rep('r', 4)),
+%'       cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+%'       n.cgroup = c(2, 2, 2),
+%'       insert.bottom = nutric.note)
+%' 
+%' dchome.nutric.plot
+%' 
+%' @
+
+\clearpage
 \section{NUTRIC vs Long-Term Mortality}
 Results for the associations between NUTRIC scores and mortality after hospital discharge follow.
 All models are Cox proportional hazards models using multiple imputation.
@@ -1039,13 +1105,6 @@ ltmort.noil6.12 <- fit.mult.impute(as.formula(paste('Surv.noil6.12m', lt.noil6.r
                                    data = modeldata.noil6.survivors)
 
 ## -- Calculate HRs + CIs, predicted values --------------------------------------------------------
-## datadist() setup
-## n.unique set to 11 so that all NUTRIC scores are predicted as integers (no trying to use 7.82...)
-ddvars <- c(lt.covars, 'nutric.il6', 'nutric.noil6',
-            paste0('rbans.global.', c(3, 12)), paste0('trail.b.', c(3, 12)))
-dd.il6.survivors <- datadist(subset(brain.oneobs, cohort.survivors.il6)[,ddvars], n.unique = 11)
-dd.noil6.survivors <- datadist(subset(brain.oneobs, cohort.survivors)[,ddvars], n.unique = 11)
-
 options(datadist = 'dd.il6.survivors')
 ltmort.sum.il6.3 <- summary(ltmort.il6.3)
 ltmort.pred.il6.3 <- Predict(ltmort.il6.3, nutric.il6 = NA, fun = exp)
