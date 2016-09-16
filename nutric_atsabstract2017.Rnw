@@ -161,6 +161,11 @@ brain.oneobs$nutric.atrisk.noil6 <- with(brain.oneobs, factor(ifelse(is.na(nutri
                                                               levels = 1:2,
                                                               labels = c('No', 'Yes')))
 
+## -- Indicator for whether patient was discharged to home -----------------------------------------
+brain.oneobs$dc.home <- with(brain.oneobs, factor(ifelse(is.na(hospdis.loc), NA,
+                                                  as.numeric(hospdis.loc != 'Home')),
+                                                  levels = 0:1, labels = c('Home', 'Not home')))
+
 ## -- Create a table of the number of patients in each cohort --------------------------------------
 cohort.ns <- data.frame(cohort = c('Enrolled patients',
                                    'In-hospital mortality',
@@ -434,11 +439,11 @@ lt.covars <- c('edu', 'frailty.num', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e',
 
 ## Create data sets for discharge location and long-term mortality analyses
 modeldata.il6.survivors <- brain.oneobs[brain.oneobs$cohort.survivors.il6,
-                                        c(lt.covars, 'nutric.il6', 'hospdis.loc',
+                                        c(lt.covars, 'nutric.il6', 'dc.home',
                                           'days.deathlast.90', 'died.brain.90',
                                           'days.deathlast.365', 'died.brain.365')]
 modeldata.noil6.survivors <- brain.oneobs[brain.oneobs$cohort.survivors,
-                                          c(lt.covars, 'nutric.noil6', 'hospdis.loc',
+                                          c(lt.covars, 'nutric.noil6', 'dc.home',
                                             'days.deathlast.90', 'died.brain.90',
                                             'days.deathlast.365', 'died.brain.365')]
 
@@ -1058,11 +1063,8 @@ ltmort.nutric.table <- results.table('ltmort')
 
 @
 
-There is a significant association between NUTRIC scores at baseline and ADL scores at 3 months;
-this association is nonlinear, so please see Figure \ref{fig:printltmortmodels} for a full picture.
-Generally, lower NUTRIC scores don't have much of a relationship with ADL scores; higher NUTRIC
-scores are associated with slightly higher ADL scores at 3 months. By 12 months, however, this
-association disappears.
+We see no meaningful association between NUTRIC score at baseline and mortality at either 3 or 12
+months after hospital discharge.
 
 Table \ref{table:ltmortresults} shows p-values for the total association of NUTRIC score with
 long-term mortality and hazard ratios comparing the 75th to the 25th percentiles of our population's
