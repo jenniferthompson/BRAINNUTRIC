@@ -199,30 +199,12 @@ latex(cohort.ns, file = '',
 
 Tables \ref{table:descinhosp} and \ref{table:desclt} describe baseline, in-hospital, and followup
 characteristics of all three modified-NUTRIC cohorts (patients included in full-NUTRIC analyses are
-a subset of this group). Figure \ref{fig:km365} shows a Kaplan-Meier curve representing mortality
-over the year following enrollment for all patients.
+a subset of this group).
 
 Figure \ref{fig:nutricplot} compares full and modified NUTRIC scores (ie, with and without IL-6) by
 cohort among patients who have both available (ie, have at least one IL-6 measurement before study
 day 5). For the vast majority of patients, these two versions of the NUTRIC are equivalent; in our
 cohort, including IL-6 doesn't seem to make very much difference.
-
-<<km365, results='asis', fig.cap='Kaplan-Meier Curve, Mortality up to 365 Days after Enrollment'>>=
-## -- Kaplan-Meier curve for 365-day mortality -----------------------------------------------------
-## Create Surv object
-allmort.Surv <-
-  with(brain.oneobs, Surv(time = days.deathlast.365, event = as.numeric(died.brain.365)))
-
-## Create plot
-## '#003D79' = Nate's preferred navy
-## '#BA6E00' = complementary color to Nate's preferred navy per paletton.com
-ggsurv(survfit(allmort.Surv ~ 1), surv.col = '#003D79', cens.col = '#BA6E00') +
-  scale_colour_manual(values = c('#003D79')) +
-  scale_x_continuous(name = 'Days Since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
-  scale_y_continuous('Probability Alive') +
-  theme_bw()
-
-@
 
 <<desctables>>=
 desc.vars <- c('age.enroll', 'sex.pp', 'race.pp', 'edu', 'charlson.score', 'num.comorbid',
@@ -342,6 +324,60 @@ latex(summaryM(formula(paste(paste(lt.vars, collapse = ' + '), '~ 1')),
 
 <<nutricplot, results = 'asis', fig.cap='Full vs Modified NUTRIC Scores by Cohort', fig.width=7.5, fig.height=3.75>>=
 nutric.scatter
+
+@
+
+\clearpage
+Figures \ref{fig:km365all} and \ref{fig:km365survivors} show Kaplan-Meier curves representing mortality over the year following enrollment for all patients and for hospital
+survivors only, respectively. \textbf{Please interpret these with caution}; because very few
+patients had NUTRIC scores of 9 or 10 at admission, drops in these KM curves look more dramatic
+than in others.
+
+<<km365setup>>=
+## -- Kaplan-Meier curve for 365-day mortality -----------------------------------------------------
+## Create Surv objects
+allmort.Surv <-
+  with(brain.oneobs, Surv(time = days.deathlast.365, event = as.numeric(died.brain.365)))
+allmort.bynutric <- survfit(allmort.Surv ~ nutric.il6, data = brain.oneobs)
+
+ltmort.Surv <- with(subset(brain.oneobs, cohort.lt), {
+  Surv(time = days.deathlast.365, event = as.numeric(died.brain.365)) })
+ltmort.bynutric <- survfit(ltmort.Surv ~ nutric.il6, data = subset(brain.oneobs, cohort.lt))
+
+## Create monochromatic color scheme based on Nate's preferred navy (#003D79, colorhexa.com)
+# ## Highest NUTRIC = lightest blue
+# nutric.colors <- c('#00172E', '#002447', '#003061', '#003D7A', '#004A94', '#0057AD', '#0063C7', '#0070E1', '#007CFA', '#1589FF', '#2F96FF')
+## Highest NUTRIC = darkest blue
+nutric.colors <- c('#2F96FF', '#1589FF', '#007CFA', '#0070E1', '#0063C7', '#0057AD', '#004A94',
+                   '#003D7A', '#003061', '#002447', '#00172E')
+
+## Create plots
+## '#003D79' = Nate's preferred navy
+## '#BA6E00' = complementary color to Nate's preferred navy per paletton.com
+
+@
+
+<<km365all, results='asis', fig.cap='Kaplan-Meier Curve, Mortality among All Patients up to 365 Days after Enrollment', fig.height = 4>>=
+## All BRAIN patients
+ggsurv(allmort.bynutric, cens.col = '#BA6E00', cens.shape = NA) +
+  scale_colour_manual(name = 'NUTRIC,\nICU Admission', values = nutric.colors) +
+  scale_x_continuous(name = 'Days Since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
+  scale_y_continuous('Probability Alive') +
+  guides(linetype = FALSE) +
+  ggtitle('All BRAIN Patients') +
+  theme_bw()
+
+@
+
+<<km365survivors, results='asis', fig.cap='Kaplan-Meier Curve, Mortality among Hospital Survivors up to 365 Days after Enrollment', fig.height = 4>>=
+## Patients who survived hospital stay
+ggsurv(ltmort.bynutric, cens.col = '#BA6E00', cens.shape = NA) +
+  scale_colour_manual(name = 'NUTRIC,\nICU Admission', values = nutric.colors) +
+  scale_x_continuous(name = 'Days Since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
+  scale_y_continuous('Probability Alive') +
+  guides(linetype = FALSE) +
+  ggtitle('BRAIN Hospital Survivors') +
+  theme_bw()
 
 @
 
