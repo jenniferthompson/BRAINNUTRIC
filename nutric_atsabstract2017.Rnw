@@ -350,11 +350,11 @@ nutric.scatter
 All analyses are done using multivariable regression; specific types of regression are noted for
 each outcome. All hypothesis testing is done using the \Sexpr{use.method} method.
 
-To avoid bias as much as possible, models for all long-term cognitive and disability outcomes are
-done using multiple imputation. All patients with at least partial outcomes data at that time point
-are included in the cohort; we use multiple imputation (specifically, predictive mean matching) to
-impute both missing covariates and missing outcomes for all of these patients. Amounts of missing
-data are reported for each model in section \ref{section:missingness}.
+To avoid bias as much as possible, models for all long-term cognitive, disability and HRQOL outcomes
+are done using multiple imputation. All patients with at least partial outcomes data at that time
+point are included in the cohort; we use multiple imputation (specifically, predictive mean
+matching) to impute both missing covariates and missing outcomes for all of these patients. Amounts
+of missing data are reported for each model in section \ref{section:missingness}.
 
 All models include the following covariates (with slight changes as noted for in-hospital mortality;
 due to the potential for immortal time bias with this outcome, we will use time-varying Cox models
@@ -709,7 +709,7 @@ create.nb.preddata <- function(outcome = c('adl', 'faq')){
 }
 
 ## -- rms models (d/t datadist, requires Predict() objects to be created outside function) ---------
-create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome')){
+create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome')){
   ## 'dchome' only has one time point; treat differently than 3/12-m outcomes
   if(outcome == 'dchome'){
     mod.il6 <- get(paste0(outcome, '.il6'))
@@ -766,59 +766,61 @@ create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome
 ## -- Step 4: Create plot of predicted ADL/FAQ scores vs NUTRIC scores -----------------------------
 ## -- Both versions and both times in a single plot ------------------------------------------------
 ## Create data frame of Y axis labels
-yaxis.labels <- data.frame(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort', 'dchome'),
-                           ylabel = c('Katz ADL Score', 'FAQ Score', 'RBANS Global Score',
-                                      'Trails B Score', 'Hazard of Death',
-                                      'Probability of\nDischarge to Non-Home'))
+yaxis.labels <-
+  data.frame(outcome = c('adl', 'faq', 'rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome'),
+             ylabel = c('Katz ADL Score', 'FAQ Score', 'RBANS Global Score', 'Trails B Score',
+                        'SF-36 PCS', 'SF-36 MCS',
+                        'Hazard of Death', 'Probability of\nDischarge to Non-Home'))
 
 ## Plotting function
-create.nutric.plot <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort', 'dchome')){
-  ## Get data set of predicted values for each time/version combination; set variable names
-  if(outcome %in% c('adl', 'faq')){
-    preddata <- create.nb.preddata(outcome)
-    x.var <- 'xvalue'
-    y.var <- 'count.pe'
-    ymin.var <- 'count.lcl'
-    ymax.var <- 'count.ucl'
-  } else if(outcome %in% c('rbans', 'trailb', 'ltmort', 'dchome')){
-    preddata <- create.rms.preddata(outcome)
-    x.var <- 'xvalue'
-    y.var <- 'yhat'
-    ymin.var <- 'lower'
-    ymax.var <- 'upper'
+create.nutric.plot <-
+  function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome')){
+    ## Get data set of predicted values for each time/version combination; set variable names
+    if(outcome %in% c('adl', 'faq')){
+      preddata <- create.nb.preddata(outcome)
+      x.var <- 'xvalue'
+      y.var <- 'count.pe'
+      ymin.var <- 'count.lcl'
+      ymax.var <- 'count.ucl'
+    } else if(outcome %in% c('rbans', 'trailb', 'ltmort', 'dchome')){
+      preddata <- create.rms.preddata(outcome)
+      x.var <- 'xvalue'
+      y.var <- 'yhat'
+      ymin.var <- 'lower'
+      ymax.var <- 'upper'
+    }
+    
+    ## Is there >1 time point in the predicted data?
+    mult.timepts <- length(unique(preddata$time.f)) > 1
+    
+    ## Set Y axis label
+    outcome.ylab <- yaxis.labels[match(outcome, yaxis.labels$outcome), 'ylabel']
+    
+    ## Create plot, faceted by NUTRIC version and followup time, set to Nate's preferred aesthetic
+    nutric.plot <- ggplot(data = preddata,
+                          aes_string(x = x.var, y = y.var, ymin = ymin.var, ymax = ymax.var)) +
+      scale_x_continuous(breaks = seq(0, max(preddata$xvalue), 1),
+                         name = 'NUTRIC Score at ICU Admission') +
+      scale_y_continuous(name = paste('Adjusted', outcome.ylab)) +
+      geom_pointrange(colour = "#003D79") +
+      theme_bw()
+    
+    if(mult.timepts){
+      nutric.plot <- nutric.plot + facet_grid(time.f ~ version.f, scales = 'free_x')
+    } else{
+      nutric.plot <- nutric.plot + facet_wrap(~ version.f, scales = 'free_x')
+    }
+    
+    if(outcome == 'dchome'){
+      nutric.plot <- nutric.plot +
+        scale_y_continuous(limits = c(0, 1), name = paste('Adjusted', outcome.ylab))
+    } else{
+      nutric.plot <- nutric.plot + scale_y_continuous(name = paste('Adjusted', outcome.ylab))
+    }
+    
+    nutric.plot
+    
   }
-  
-  ## Is there >1 time point in the predicted data?
-  mult.timepts <- length(unique(preddata$time.f)) > 1
-  
-  ## Set Y axis label
-  outcome.ylab <- yaxis.labels[match(outcome, yaxis.labels$outcome), 'ylabel']
-
-  ## Create plot, faceted by NUTRIC version and followup time, set to Nate's preferred aesthetic
-  nutric.plot <- ggplot(data = preddata,
-                        aes_string(x = x.var, y = y.var, ymin = ymin.var, ymax = ymax.var)) +
-    scale_x_continuous(breaks = seq(0, max(preddata$xvalue), 1),
-                       name = 'NUTRIC Score at ICU Admission') +
-    scale_y_continuous(name = paste('Adjusted', outcome.ylab)) +
-    geom_pointrange(colour = "#003D79") +
-    theme_bw()
-  
-  if(mult.timepts){
-    nutric.plot <- nutric.plot + facet_grid(time.f ~ version.f, scales = 'free_x')
-  } else{
-    nutric.plot <- nutric.plot + facet_wrap(~ version.f, scales = 'free_x')
-  }
-  
-  if(outcome == 'dchome'){
-    nutric.plot <- nutric.plot +
-      scale_y_continuous(limits = c(0, 1), name = paste('Adjusted', outcome.ylab))
-  } else{
-    nutric.plot <- nutric.plot + scale_y_continuous(name = paste('Adjusted', outcome.ylab))
-  }
-  
-  nutric.plot
-  
-}
 
 ## -- Step 5: Calculate IRRs, CIs for specified values of a variable -------------------------------
 calc.ratioci.nb <- function(irr.var,          ## which variable to calculate IRR for
@@ -939,7 +941,7 @@ nb.results.data <- function(outcome = c('adl', 'faq')){
 }
 
 ## -- rms models, exponentiating point estimates for mort, disloc outcomes -------------------------
-rms.results.data <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome')){
+rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome')){
   if(outcome == 'dchome'){
     mod.il6 <- get(paste0(outcome, '.il6'))
     mod.noil6 <- get(paste0(outcome, '.noil6'))
@@ -1012,25 +1014,26 @@ rms.results.data <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome'))
 }
 
 ## -- Step 7: Create data set of results from [model type].results.data() formatted for table ------
-results.table <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort', 'dchome')){
-  if(outcome %in% c('adl', 'faq')){
-    results.data <- nb.results.data(outcome)
-  } else if(outcome %in% c('rbans', 'trailb', 'ltmort', 'dchome')){
-    results.data <- rms.results.data(outcome)
+results.table <-
+  function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome')){
+    if(outcome %in% c('adl', 'faq')){
+      results.data <- nb.results.data(outcome)
+    } else{
+      results.data <- rms.results.data(outcome)
+    }
+    
+    results.data <- results.data %>%
+      dplyr::select(time.f, version.f, comp.str, peci.str, pval.str) %>%
+      gather(key = quant, value = quantity, comp.str:pval.str) %>%
+      mutate(quant = ifelse(version.f == 'With IL-6',
+                            paste0(quant, '.il6'),
+                            paste0(quant, '.noil6'))) %>%
+      dplyr::select(-version.f) %>%
+      spread(key = quant, value = quantity)
+    results.data[,c('time.f',
+                    'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                    'comp.str.noil6', 'peci.str.noil6', 'pval.str.noil6')]
   }
-  
-  results.data <- results.data %>%
-    dplyr::select(time.f, version.f, comp.str, peci.str, pval.str) %>%
-    gather(key = quant, value = quantity, comp.str:pval.str) %>%
-    mutate(quant = ifelse(version.f == 'With IL-6',
-                          paste0(quant, '.il6'),
-                          paste0(quant, '.noil6'))) %>%
-    dplyr::select(-version.f) %>%
-    spread(key = quant, value = quantity)
-  results.data[,c('time.f',
-                  'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
-                  'comp.str.noil6', 'peci.str.noil6', 'pval.str.noil6')]
-}
 
 ## -- Create table of missingness for each outcome -------------------------------------------------
 ## Function to calculate N, % missing for a given mice object
@@ -1070,7 +1073,7 @@ rownames(missing.lt.df) <- missing.lt.df$varname
 
 \subsection{Missingness for Each Cohort} \label{section:missingness}
 Tables \ref{table:survmissing} and \ref{table:ltmissing} show missing covariates and outcomes
-for, respectively, hospital survivors (used for discharge location and long-term mortality models) and long-term cognitive and disability cohorts.
+for, respectively, hospital survivors (used for discharge location and long-term mortality models) and long-term cognitive, disability and HRQOL cohorts.
 
 <<printmissing, results = 'asis'>>=
 latex(missing.survivors.df[,2:3], file = '',
