@@ -782,7 +782,7 @@ create.nutric.plot <-
       y.var <- 'count.pe'
       ymin.var <- 'count.lcl'
       ymax.var <- 'count.ucl'
-    } else if(outcome %in% c('rbans', 'trailb', 'ltmort', 'dchome')){
+    } else{
       preddata <- create.rms.preddata(outcome)
       x.var <- 'xvalue'
       y.var <- 'yhat'
@@ -1249,7 +1249,7 @@ ltmort.nutric.plot
 @
 
 \clearpage
-\section{NUTRIC vs Long-Term Cognition and Disability}
+\section{NUTRIC vs Long-Term Cognition, Disability and Quality of Life}
 Results for the associations between NUTRIC scores and long-term cognitive and disability outcomes
 follow.
 
@@ -1508,8 +1508,8 @@ followup time.
 
 Figure \ref{fig:printtrailbmodels} shows the full relationships between baseline NUTRIC score and
 followup Trails B scores. Table \ref{table:trailbresults} shows p-values for the total association
-of NUTRIC score with FAQ score and adjusted differences in RBANS scores between the 75th and the
-25th percentiles of our population's NUTRIC scores.
+of NUTRIC score with Trails B t-score and adjusted differences in Trails B t-scores between the 75th
+and the 25th percentiles of our population's NUTRIC scores.
   
 <<printtrailbmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Executive Function (Trails B T-Scores) at 3 \\& 12 Months'>>=
 latex(trailb.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
@@ -1531,6 +1531,147 @@ trailb.nutric.plot
 
 @
 
+\clearpage
+\subsection{NUTRIC Scores vs Physical Quality of Life (SF-36 PCS)}
+<<pcsmodels>>=
+## -- Fit models -----------------------------------------------------------------------------------
+pcs.il6.3 <- fit.mult.impute(as.formula(paste('sf36.pcs.3', lt.il6.rh, sep = ' ~ ')),
+                             fitter = ols,
+                             xtrans = mice.il6.3,
+                             data = subset(brain.oneobs, cohort.3m.il6))
+pcs.noil6.3 <- fit.mult.impute(as.formula(paste('sf36.pcs.3', lt.noil6.rh, sep = ' ~ ')),
+                               fitter = ols,
+                               xtrans = mice.noil6.3,
+                               data = subset(brain.oneobs, cohort.3m))
+pcs.il6.12 <- fit.mult.impute(as.formula(paste('sf36.pcs.12', lt.il6.rh, sep = ' ~ ')),
+                              fitter = ols,
+                              xtrans = mice.il6.12,
+                              data = subset(brain.oneobs, cohort.12m.il6))
+pcs.noil6.12 <- fit.mult.impute(as.formula(paste('sf36.pcs.12', lt.noil6.rh, sep = ' ~ ')),
+                                fitter = ols,
+                                xtrans = mice.noil6.12,
+                                data = subset(brain.oneobs, cohort.12m))
+
+## -- Calculate differences + CIs, predicted values ------------------------------------------------
+options(datadist = 'dd.il6.3')
+pcs.sum.il6.3 <- summary(pcs.il6.3)
+pcs.pred.il6.3 <- Predict(pcs.il6.3, nutric.il6 = NA)
+
+options(datadist = 'dd.noil6.3')
+pcs.sum.noil6.3 <- summary(pcs.noil6.3)
+pcs.pred.noil6.3 <- Predict(pcs.noil6.3, nutric.noil6 = NA)
+
+options(datadist = 'dd.il6.12')
+pcs.sum.il6.12 <- summary(pcs.il6.12)
+pcs.pred.il6.12 <- Predict(pcs.il6.12, nutric.il6 = NA)
+
+options(datadist = 'dd.noil6.12')
+pcs.sum.noil6.12 <- summary(pcs.noil6.12)
+pcs.pred.noil6.12 <- Predict(pcs.noil6.12, nutric.noil6 = NA)
+
+pcs.nutric.plot <- create.nutric.plot('pcs')
+pcs.nutric.table <- results.table('pcs')
+
+@
+
+There is a meaningful and very nonlinear association between NUTRIC scores at baseline and SF-36
+PCS scores at 3 months; this relationship is not apparent at 12 months.
+
+Figure \ref{fig:printpcsmodels} shows the full relationships between baseline NUTRIC score and
+followup SF-36 PCS scores. Table \ref{table:pcsresults} shows p-values for the total association
+of NUTRIC score with SF-36 PCS score and adjusted differences in SF-36 PCS scores between the 75th
+and the 25th percentiles of our population's NUTRIC scores.
+  
+<<printpcsmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Physical Quality of Life (SF-36 PCS) at 3 \\& 12 Months'>>=
+latex(pcs.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                          'peci.str.noil6', 'pval.str.noil6')],
+      file = '',
+      where = '!h',
+      caption = 'NUTRIC Score at ICU Admission vs Physical Quality of Life (SF-36 PCS) at 3 \\& 12 Months',
+      caption.lot = 'NUTRIC vs Physical Quality of Life (SF-36 PCS)',
+      label = 'table:pcsresults',
+      rowname = NULL,
+      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
+                   rep(c('Difference (95\\% CI)', 'P-Value'), 2)),
+      col.just = c('l', 'c', rep('r', 4)),
+      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+      n.cgroup = c(2, 2, 2),
+      insert.bottom = nutric.note)
+
+pcs.nutric.plot
+
+@
+
+\clearpage
+\subsection{NUTRIC Scores vs Mental Quality of Life (SF-36 MCS)}
+<<mcsmodels>>=
+## -- Fit models -----------------------------------------------------------------------------------
+mcs.il6.3 <- fit.mult.impute(as.formula(paste('sf36.mcs.3', lt.il6.rh, sep = ' ~ ')),
+                             fitter = ols,
+                             xtrans = mice.il6.3,
+                             data = subset(brain.oneobs, cohort.3m.il6))
+mcs.noil6.3 <- fit.mult.impute(as.formula(paste('sf36.mcs.3', lt.noil6.rh, sep = ' ~ ')),
+                               fitter = ols,
+                               xtrans = mice.noil6.3,
+                               data = subset(brain.oneobs, cohort.3m))
+mcs.il6.12 <- fit.mult.impute(as.formula(paste('sf36.mcs.12', lt.il6.rh, sep = ' ~ ')),
+                              fitter = ols,
+                              xtrans = mice.il6.12,
+                              data = subset(brain.oneobs, cohort.12m.il6))
+mcs.noil6.12 <- fit.mult.impute(as.formula(paste('sf36.mcs.12', lt.noil6.rh, sep = ' ~ ')),
+                                fitter = ols,
+                                xtrans = mice.noil6.12,
+                                data = subset(brain.oneobs, cohort.12m))
+
+## -- Calculate differences + CIs, predicted values ------------------------------------------------
+options(datadist = 'dd.il6.3')
+mcs.sum.il6.3 <- summary(mcs.il6.3)
+mcs.pred.il6.3 <- Predict(mcs.il6.3, nutric.il6 = NA)
+
+options(datadist = 'dd.noil6.3')
+mcs.sum.noil6.3 <- summary(mcs.noil6.3)
+mcs.pred.noil6.3 <- Predict(mcs.noil6.3, nutric.noil6 = NA)
+
+options(datadist = 'dd.il6.12')
+mcs.sum.il6.12 <- summary(mcs.il6.12)
+mcs.pred.il6.12 <- Predict(mcs.il6.12, nutric.il6 = NA)
+
+options(datadist = 'dd.noil6.12')
+mcs.sum.noil6.12 <- summary(mcs.noil6.12)
+mcs.pred.noil6.12 <- Predict(mcs.noil6.12, nutric.noil6 = NA)
+
+mcs.nutric.plot <- create.nutric.plot('mcs')
+mcs.nutric.table <- results.table('mcs')
+
+@
+
+There is a significant association between higher NUTRIC scores at baseline and higher SF-36
+MCS scores at both 3 and 12 months after hospital discharge.
+
+Figure \ref{fig:printmcsmodels} shows the full relationships between baseline NUTRIC score and
+followup SF-36 MCS scores. Table \ref{table:Mcsresults} shows p-values for the total association
+of NUTRIC score with SF-36 MCS score and adjusted differences in SF-36 MCS scores between the 75th
+and the 25th percentiles of our population's NUTRIC scores.
+  
+<<printmcsmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Mental Quality of Life (SF-36 MCS) at 3 \\& 12 Months'>>=
+latex(mcs.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                          'peci.str.noil6', 'pval.str.noil6')],
+      file = '',
+      where = '!h',
+      caption = 'NUTRIC Score at ICU Admission vs Mental Quality of Life (SF-36 MCS) at 3 \\& 12 Months',
+      caption.lot = 'NUTRIC vs Mental Quality of Life (SF-36 MCS)',
+      label = 'table:mcsresults',
+      rowname = NULL,
+      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
+                   rep(c('Difference (95\\% CI)', 'P-Value'), 2)),
+      col.just = c('l', 'c', rep('r', 4)),
+      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+      n.cgroup = c(2, 2, 2),
+      insert.bottom = nutric.note)
+
+mcs.nutric.plot
+
+@
 
 % \end{landscape}
 \clearpage
