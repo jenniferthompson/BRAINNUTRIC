@@ -719,7 +719,7 @@ create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome
     pred.noil6 <- as.data.frame(get(paste0(outcome, '.pred.noil6')))
     names(pred.noil6)[grep('^nutric', names(pred.noil6))] <- 'xvalue'
 
-    pred.il6$time <- pred.noil6$time <- 1
+    pred.il6$time <- pred.noil6$time <- 0
 
     pred.il6$version <- 1
     pred.noil6$version <- 2
@@ -752,7 +752,9 @@ create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome
   }
   
   pred.data <- bind_rows(pred.list)
-  pred.data$time.f <- factor(pred.data$time, levels = 1:2, labels = c('3 Months', '12 Months'))
+  pred.data$time.f <- factor(pred.data$time,
+                             levels = 0:2,
+                             labels = c('Discharge', '3 Months', '12 Months'))
   pred.data$version.f <-
     factor(pred.data$version, levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
   
@@ -766,7 +768,7 @@ create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome
 yaxis.labels <- data.frame(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort', 'dchome'),
                            ylabel = c('Katz ADL Score', 'FAQ Score', 'RBANS Global Score',
                                       'Trails B Score', 'Hazard of Death',
-                                      'Probability of Discharge to Non-Home'))
+                                      'Probability of\nDischarge to Non-Home'))
 
 ## Plotting function
 create.nutric.plot <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort', 'dchome')){
@@ -804,6 +806,13 @@ create.nutric.plot <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltm
     nutric.plot <- nutric.plot + facet_grid(time.f ~ version.f, scales = 'free_x')
   } else{
     nutric.plot <- nutric.plot + facet_wrap(~ version.f, scales = 'free_x')
+  }
+  
+  if(outcome == 'dchome'){
+    nutric.plot <- nutric.plot +
+      scale_y_continuous(limits = c(0, 1), name = paste('Adjusted', outcome.ylab))
+  } else{
+    nutric.plot <- nutric.plot + scale_y_continuous(name = paste('Adjusted', outcome.ylab))
   }
   
   nutric.plot
@@ -929,42 +938,67 @@ nb.results.data <- function(outcome = c('adl', 'faq')){
 }
 
 ## -- rms models, exponentiating point estimates for mort, disloc outcomes -------------------------
-rms.results.data <- function(outcome = c('rbans', 'trailb', 'ltmort')){
-  mod.il6.3 <- get(paste0(outcome, '.il6.3'))
-  mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
-  mod.il6.12 <- get(paste0(outcome, '.il6.12'))
-  mod.noil6.12 <- get(paste0(outcome, '.noil6.12'))
-  
-  sum.il6.3 <- get(paste0(outcome, '.sum.il6.3'))
-  sum.noil6.3 <- get(paste0(outcome, '.sum.noil6.3'))
-  sum.il6.12 <- get(paste0(outcome, '.sum.il6.12'))
-  sum.noil6.12 <- get(paste0(outcome, '.sum.noil6.12'))
+rms.results.data <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome')){
+  if(outcome == 'dchome'){
+    mod.il6 <- get(paste0(outcome, '.il6'))
+    mod.noil6 <- get(paste0(outcome, '.noil6'))
+    
+    sum.il6 <- get(paste0(outcome, '.sum.il6'))
+    sum.noil6 <- get(paste0(outcome, '.sum.noil6'))
 
-  diffci.il6.3 <- sum.il6.3[grep('^nutric', rownames(sum.il6.3)),]
-  diffci.noil6.3 <- sum.noil6.3[grep('^nutric', rownames(sum.noil6.3)),]
-  diffci.il6.12 <- sum.il6.12[grep('^nutric', rownames(sum.il6.12)),]
-  diffci.noil6.12 <- sum.noil6.12[grep('^nutric', rownames(sum.noil6.12)),]
-  
-  if(outcome %in% c('ltmort')){
-    exp.cols <- c(4, 6, 7)
-    diffci.il6.3[exp.cols] <- exp(diffci.il6.3[exp.cols])
-    diffci.noil6.3[exp.cols] <- exp(diffci.noil6.3[exp.cols])
-    diffci.il6.12[exp.cols] <- exp(diffci.il6.12[exp.cols])
-    diffci.noil6.12[exp.cols] <- exp(diffci.noil6.12[exp.cols])
+    diffci.il6 <- sum.il6[grep('^nutric', rownames(sum.il6)),]
+    diffci.noil6 <- sum.noil6[grep('^nutric', rownames(sum.noil6)),]
+    
+    diffci.list <- list(diffci.il6, diffci.noil6)
+    mod.list <- list(mod.il6, mod.noil6)
+    
+  } else{
+    mod.il6.3 <- get(paste0(outcome, '.il6.3'))
+    mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
+    mod.il6.12 <- get(paste0(outcome, '.il6.12'))
+    mod.noil6.12 <- get(paste0(outcome, '.noil6.12'))
+    
+    sum.il6.3 <- get(paste0(outcome, '.sum.il6.3'))
+    sum.noil6.3 <- get(paste0(outcome, '.sum.noil6.3'))
+    sum.il6.12 <- get(paste0(outcome, '.sum.il6.12'))
+    sum.noil6.12 <- get(paste0(outcome, '.sum.noil6.12'))
+    
+    diffci.il6.3 <- sum.il6.3[grep('^nutric', rownames(sum.il6.3)),]
+    diffci.noil6.3 <- sum.noil6.3[grep('^nutric', rownames(sum.noil6.3)),]
+    diffci.il6.12 <- sum.il6.12[grep('^nutric', rownames(sum.il6.12)),]
+    diffci.noil6.12 <- sum.noil6.12[grep('^nutric', rownames(sum.noil6.12)),]
+    
+    diffci.list <- list(diffci.il6.3, diffci.noil6.3, diffci.il6.12, diffci.noil6.12)
+    mod.list <- list(mod.il6.3, mod.noil6.3, mod.il6.12, mod.noil6.12)
+    
   }
   
-  p.list <- lapply(list(mod.il6.3, mod.noil6.3, mod.il6.12, mod.noil6.12), FUN = function(m){
+  if(outcome %in% c('ltmort', 'dchome')){
+    exp.cols <- c(4, 6, 7)
+    diffci.list <- lapply(diffci.list, FUN = function(x){
+      x[exp.cols] <- exp(x[exp.cols])
+      x
+    })
+  }
+  
+  p.list <- lapply(mod.list, FUN = function(m){
     anova(m)[grep('^nutric', rownames(anova(m))), 'P'] })
   
-  diffcip.data <-
-    as.data.frame(rbind(c(diffci.il6.3, p.list[[1]]), c(diffci.noil6.3, p.list[[2]]),
-                        c(diffci.il6.12, p.list[[3]]), c(diffci.noil6.12, p.list[[4]])))
+  diffcip.data <- as.data.frame(do.call(rbind, lapply(1:length(p.list), FUN = function(i){
+    c(diffci.list[[i]], p.list[[i]])
+  })))
+  
   names(diffcip.data) <- c('ref.val', 'comp.val', 'diff', 'pointest', 'se', 'lcl', 'ucl',
                            'type', 'pval')
 
-  diffcip.data$time.f <- factor(c(1, 1, 2, 2), levels = 1:2, labels = c('3 Months', '12 Months'))
-  diffcip.data$version.f <-
-    factor(c(1, 2, 1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  if(outcome == 'dchome'){
+    diffcip.data$time.f <- factor(c(0, 0), levels = 0, labels = c('Discharge'))
+    diffcip.data$version.f <- factor(c(1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  } else{
+    diffcip.data$time.f <- factor(c(1, 1, 2, 2), levels = 1:2, labels = c('3 Months', '12 Months'))
+    diffcip.data$version.f <-
+      factor(c(1, 2, 1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  }
   
   diffcip.data$comp.str <- with(diffcip.data, paste(comp.val, 'vs.', ref.val))
   diffcip.data$peci.str <- with(diffcip.data, paste0(rndformat(pointest), ' (',
@@ -977,10 +1011,10 @@ rms.results.data <- function(outcome = c('rbans', 'trailb', 'ltmort')){
 }
 
 ## -- Step 7: Create data set of results from [model type].results.data() formatted for table ------
-results.table <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort')){
+results.table <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltmort', 'dchome')){
   if(outcome %in% c('adl', 'faq')){
     results.data <- nb.results.data(outcome)
-  } else if(outcome %in% c('rbans', 'trailb', 'ltmort')){
+  } else if(outcome %in% c('rbans', 'trailb', 'ltmort', 'dchome')){
     results.data <- rms.results.data(outcome)
   }
   
@@ -1057,14 +1091,14 @@ dd.noil6.survivors <- datadist(subset(brain.oneobs, cohort.survivors)[,ddvars], 
 
 options(datadist = 'dd.il6.survivors')
 dchome.sum.il6 <- summary(dchome.il6)
-dchome.pred.il6 <- Predict(dchome.il6, nutric.il6 = NA, fun = exp)
+dchome.pred.il6 <- Predict(dchome.il6, nutric.il6 = NA, fun = plogis)
 
 options(datadist = 'dd.noil6.survivors')
 dchome.sum.noil6 <- summary(dchome.noil6)
-dchome.pred.noil6 <- Predict(dchome.noil6, nutric.noil6 = NA, fun = exp)
+dchome.pred.noil6 <- Predict(dchome.noil6, nutric.noil6 = NA, fun = plogis)
 
 dchome.nutric.plot <- create.nutric.plot('dchome')
-# dchome.nutric.table <- results.table('dchome')
+dchome.nutric.table <- results.table('dchome')
 
 @
 
@@ -1078,21 +1112,20 @@ Table \ref{table:dchomeresults} shows p-values for the total association of NUTR
 discharge location and odds ratios comparing the 75th to the 25th percentiles of our population's
 NUTRIC scores.
   
-<<printdchomemodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home'>>=
-# latex(dchome.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
-#                             'peci.str.noil6', 'pval.str.noil6')],
-#      file = '',
-#      where = '!h',
-#      caption = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home',
-#      caption.lot = 'NUTRIC vs Discharge Location',
-#      label = 'table:dchomeresults',
-#      rowname = NULL,
-#      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
-#                   rep(c('HR (95\\% CI)', 'P-Value'), 2)),
-#      col.just = c('l', 'c', rep('r', 4)),
-#      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
-#      n.cgroup = c(2, 2, 2),
-#      insert.bottom = nutric.note)
+<<printdchomemodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home', fig.height=3.5>>=
+latex(dchome.nutric.table[,c('comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                            'peci.str.noil6', 'pval.str.noil6')],
+     file = '',
+     where = '!h',
+     caption = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home',
+     caption.lot = 'NUTRIC vs Discharge Location',
+     label = 'table:dchomeresults',
+     rowname = NULL,
+     colheads = c('NUTRIC Score Comparison*', rep(c('OR (95\\% CI)', 'P-Value'), 2)),
+     col.just = c('c', rep('r', 4)),
+     cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+     n.cgroup = c(1, 2, 2),
+     insert.bottom = nutric.note)
 
 dchome.nutric.plot
 
