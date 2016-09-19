@@ -354,10 +354,11 @@ To avoid bias as much as possible, models for all long-term cognitive and disabi
 done using multiple imputation. All patients with at least partial outcomes data at that time point
 are included in the cohort; we use multiple imputation (specifically, predictive mean matching) to
 impute both missing covariates and missing outcomes for all of these patients. Amounts of missing
-data are reported for each model.
+data are reported for each model in section \ref{section:missingness}.
 
-All models include the following covariates (with slight changes as noted for in-hospital mortality,
-due to the potential for immortal time bias with this outcome). Most continuous covariates (noted
+All models include the following covariates (with slight changes as noted for in-hospital mortality;
+due to the potential for immortal time bias with this outcome, we will use time-varying Cox models
+which incorporate daily variables rather than summary variables). Most continuous covariates (noted
 below) were allowed to have a nonlinear relationship with the outcomes using restricted cubic
 splines; other continuous covariates were forced to have a linear relationship, due both to limited
 sample size and to lack of variability in those covariates (eg, over 75\% of baseline ADL values
@@ -1067,6 +1068,37 @@ rownames(missing.lt.df) <- missing.lt.df$varname
 
 @
 
+\subsection{Missingness for Each Cohort} \label{section:missingness}
+Tables \ref{table:survmissing} and \ref{table:ltmissing} show missing covariates and outcomes
+for, respectively, hospital survivors (used for discharge location and long-term mortality models) and long-term cognitive and disability cohorts.
+
+<<printmissing, results = 'asis'>>=
+latex(missing.survivors.df[,2:3], file = '',
+      title = '',
+      where = '!h',
+      caption = 'Missing Data for Discharge Location and Long-Term Mortality Models',
+      caption.lot = 'Missing Data for Discharge, Long-Term Mortality Models',
+      label = 'table:survmissing',
+      rgroup = c('Covariates', 'Outcomes'),
+      n.rgroup = c(13, 1),
+      colheads = c('With IL-6', 'Without IL-6'),
+      col.just = rep('c', 2))
+
+latex(missing.lt.df[,2:5], file = '',
+      title = '',
+      where = '!h',
+      caption = 'Missing Data for Long-Term Outcome Models',
+      caption.lot = 'Missing Data for Long-Term Outcome Models',
+      label = 'table:ltmissing',
+      rgroup = c('Covariates', 'Outcomes'),
+      n.rgroup = c(13, 6),
+      colheads = rep(c('With IL-6', 'Without IL-6'), 2),
+      col.just = rep('c', 4),
+      cgroup = c('3 Months', '12 Months'),
+      n.cgroup = c(2, 2))
+
+@
+
 \clearpage
 \section{NUTRIC vs Hospital Discharge Location}
 <<dchomemodels>>=
@@ -1148,8 +1180,6 @@ Surv.noil6.12m <- with(modeldata.noil6.survivors, {
   Surv(time = days.deathlast.365, event = (died.brain.365 == 'Died during first 365 days')) })
 
 ## -- Run models -----------------------------------------------------------------------------------
-lt.mort.rh <- "rcs(edu, 3) + frailty.num + sex.pp + rcs(bmi, 3) + iqcode.score.e + adl.e + rcs(faq.e, 3) + rcs(mean.modsofa.icu, 3) + rcs(icudays.sevseptic.s, 3) + rcs(del.s.imp, 3) + rcs(coma.s.imp, 3) + rcs(vent.los.tot.s, 3)"
-
 ltmort.il6.3 <- fit.mult.impute(as.formula(paste('Surv.il6.3m', lt.il6.rh, sep = ' ~ ')),
                                 fitter = cph,
                                 xtrans = mice.il6.survivors,
@@ -1218,26 +1248,8 @@ ltmort.nutric.plot
 \clearpage
 \section{NUTRIC vs Long-Term Cognition and Disability}
 Results for the associations between NUTRIC scores and long-term cognitive and disability outcomes
-follow. Because all of the long-term outcome models have the same amounts of missingness,
-missingness for each cohort is presented in Table \ref{table:ltmissing}.
+follow.
 
-<<printmissinglt, results = 'asis'>>=
-latex(missing.lt.df[,2:5], file = '',
-      title = '',
-      where = '!h',
-      caption = 'Missing Data for Long-Term Outcome Models',
-      caption.lot = 'Missing Data for Long-Term Outcome Models',
-      label = 'table:ltmissing',
-      rgroup = c('Covariates', 'Outcomes'),
-      n.rgroup = c(13, 6),
-      colheads = rep(c('With IL-6', 'Without IL-6'), 2),
-      col.just = rep('c', 4),
-      cgroup = c('3 Months', '12 Months'),
-      n.cgroup = c(2, 2))
-
-@
-
-\clearpage
 \subsection{NUTRIC Scores vs ADLs (Katz ADL)}
 <<adlmodels>>=
 ## -- 3-month ADL ----------------------------------------------------------------------------------
@@ -1444,7 +1456,6 @@ latex(rbans.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.
 rbans.nutric.plot
 
 @
-
 
 \clearpage
 \subsection{NUTRIC Scores vs Executive Function (Trails B)}
