@@ -708,28 +708,50 @@ create.nb.preddata <- function(outcome = c('adl', 'faq')){
 }
 
 ## -- rms models (d/t datadist, requires Predict() objects to be created outside function) ---------
-create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'mort')){
-  mod.il6.3 <- get(paste0(outcome, '.il6.3'))
-  mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
-  mod.il6.12 <- get(paste0(outcome, '.il6.12'))
-  mod.noil6.12 <- get(paste0(outcome, '.noil6.12'))
+create.rms.preddata <- function(outcome = c('rbans', 'trailb', 'ltmort', 'dchome')){
+  ## 'dchome' only has one time point; treat differently than 3/12-m outcomes
+  if(outcome == 'dchome'){
+    mod.il6 <- get(paste0(outcome, '.il6'))
+    mod.noil6 <- get(paste0(outcome, '.noil6'))
+
+    pred.il6 <- as.data.frame(get(paste0(outcome, '.pred.il6')))
+    names(pred.il6)[grep('^nutric', names(pred.il6))] <- 'xvalue'
+    pred.noil6 <- as.data.frame(get(paste0(outcome, '.pred.noil6')))
+    names(pred.noil6)[grep('^nutric', names(pred.noil6))] <- 'xvalue'
+
+    pred.il6$time <- pred.noil6$time <- 1
+
+    pred.il6$version <- 1
+    pred.noil6$version <- 2
+    
+    pred.list <- list(pred.il6, pred.noil6)
+    
+  } else{
+    mod.il6.3 <- get(paste0(outcome, '.il6.3'))
+    mod.noil6.3 <- get(paste0(outcome, '.noil6.3'))
+    mod.il6.12 <- get(paste0(outcome, '.il6.12'))
+    mod.noil6.12 <- get(paste0(outcome, '.noil6.12'))
+    
+    pred.il6.3 <- as.data.frame(get(paste0(outcome, '.pred.il6.3')))
+    names(pred.il6.3)[grep('^nutric', names(pred.il6.3))] <- 'xvalue'
+    pred.noil6.3 <- as.data.frame(get(paste0(outcome, '.pred.noil6.3')))
+    names(pred.noil6.3)[grep('^nutric', names(pred.noil6.3))] <- 'xvalue'
+    pred.il6.12 <- as.data.frame(get(paste0(outcome, '.pred.il6.12')))
+    names(pred.il6.12)[grep('^nutric', names(pred.il6.12))] <- 'xvalue'
+    pred.noil6.12 <- as.data.frame(get(paste0(outcome, '.pred.noil6.12')))
+    names(pred.noil6.12)[grep('^nutric', names(pred.noil6.12))] <- 'xvalue'
+    
+    pred.il6.3$time <- pred.noil6.3$time <- 1
+    pred.il6.12$time <- pred.noil6.12$time <- 2
+    
+    pred.il6.3$version <- pred.il6.12$version <- 1
+    pred.noil6.3$version <- pred.noil6.12$version <- 2
+    
+    pred.list <- list(pred.il6.3, pred.il6.12, pred.noil6.3, pred.noil6.12)
+    
+  }
   
-  pred.il6.3 <- as.data.frame(get(paste0(outcome, '.pred.il6.3')))
-  names(pred.il6.3)[grep('^nutric', names(pred.il6.3))] <- 'xvalue'
-  pred.noil6.3 <- as.data.frame(get(paste0(outcome, '.pred.noil6.3')))
-  names(pred.noil6.3)[grep('^nutric', names(pred.noil6.3))] <- 'xvalue'
-  pred.il6.12 <- as.data.frame(get(paste0(outcome, '.pred.il6.12')))
-  names(pred.il6.12)[grep('^nutric', names(pred.il6.12))] <- 'xvalue'
-  pred.noil6.12 <- as.data.frame(get(paste0(outcome, '.pred.noil6.12')))
-  names(pred.noil6.12)[grep('^nutric', names(pred.noil6.12))] <- 'xvalue'
-  
-  pred.il6.3$time <- pred.noil6.3$time <- 1
-  pred.il6.12$time <- pred.noil6.12$time <- 2
-  
-  pred.il6.3$version <- pred.il6.12$version <- 1
-  pred.noil6.3$version <- pred.noil6.12$version <- 2
-  
-  pred.data <- rbind(pred.il6.3, pred.il6.12, pred.noil6.3, pred.noil6.12)
+  pred.data <- bind_rows(pred.list)
   pred.data$time.f <- factor(pred.data$time, levels = 1:2, labels = c('3 Months', '12 Months'))
   pred.data$version.f <-
     factor(pred.data$version, levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
@@ -763,17 +785,28 @@ create.nutric.plot <- function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'ltm
     ymax.var <- 'upper'
   }
   
+  ## Is there >1 time point in the predicted data?
+  mult.timepts <- length(unique(preddata$time.f)) > 1
+  
   ## Set Y axis label
   outcome.ylab <- yaxis.labels[match(outcome, yaxis.labels$outcome), 'ylabel']
 
   ## Create plot, faceted by NUTRIC version and followup time, set to Nate's preferred aesthetic
-  ggplot(data = preddata, aes_string(x = x.var, y = y.var, ymin = ymin.var, ymax = ymax.var)) +
-    facet_grid(time.f ~ version.f, scales = 'free_x') +
+  nutric.plot <- ggplot(data = preddata,
+                        aes_string(x = x.var, y = y.var, ymin = ymin.var, ymax = ymax.var)) +
     scale_x_continuous(breaks = seq(0, max(preddata$xvalue), 1),
                        name = 'NUTRIC Score at ICU Admission') +
     scale_y_continuous(name = paste('Adjusted', outcome.ylab)) +
     geom_pointrange(colour = "#003D79") +
     theme_bw()
+  
+  if(mult.timepts){
+    nutric.plot <- nutric.plot + facet_grid(time.f ~ version.f, scales = 'free_x')
+  } else{
+    nutric.plot <- nutric.plot + facet_wrap(~ version.f, scales = 'free_x')
+  }
+  
+  nutric.plot
   
 }
 
@@ -1030,7 +1063,7 @@ options(datadist = 'dd.noil6.survivors')
 dchome.sum.noil6 <- summary(dchome.noil6)
 dchome.pred.noil6 <- Predict(dchome.noil6, nutric.noil6 = NA, fun = exp)
 
-# dchome.nutric.plot <- create.nutric.plot('dchome')
+dchome.nutric.plot <- create.nutric.plot('dchome')
 # dchome.nutric.table <- results.table('dchome')
 
 @
@@ -1045,25 +1078,25 @@ Table \ref{table:dchomeresults} shows p-values for the total association of NUTR
 discharge location and odds ratios comparing the 75th to the 25th percentiles of our population's
 NUTRIC scores.
   
-%' <<printdchomemodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home'>>=
-%' latex(dchome.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
-%'                              'peci.str.noil6', 'pval.str.noil6')],
-%'       file = '',
-%'       where = '!h',
-%'       caption = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home',
-%'       caption.lot = 'NUTRIC vs Discharge Location',
-%'       label = 'table:dchomeresults',
-%'       rowname = NULL,
-%'       colheads = c('Followup Time', 'NUTRIC Score Comparison*',
-%'                    rep(c('HR (95\\% CI)', 'P-Value'), 2)),
-%'       col.just = c('l', 'c', rep('r', 4)),
-%'       cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
-%'       n.cgroup = c(2, 2, 2),
-%'       insert.bottom = nutric.note)
-%' 
-%' dchome.nutric.plot
-%' 
-%' @
+<<printdchomemodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home'>>=
+# latex(dchome.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+#                             'peci.str.noil6', 'pval.str.noil6')],
+#      file = '',
+#      where = '!h',
+#      caption = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home',
+#      caption.lot = 'NUTRIC vs Discharge Location',
+#      label = 'table:dchomeresults',
+#      rowname = NULL,
+#      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
+#                   rep(c('HR (95\\% CI)', 'P-Value'), 2)),
+#      col.just = c('l', 'c', rep('r', 4)),
+#      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+#      n.cgroup = c(2, 2, 2),
+#      insert.bottom = nutric.note)
+
+dchome.nutric.plot
+
+@
 
 \clearpage
 \section{NUTRIC vs Long-Term Mortality}
