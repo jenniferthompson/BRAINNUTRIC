@@ -826,7 +826,7 @@ yaxis.labels <-
   data.frame(outcome = c('adl', 'faq', 'rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome'),
              ylabel = c('Katz ADL Score', 'FAQ Score', 'RBANS Global Score', 'Trails B Score',
                         'SF-36 PCS', 'SF-36 MCS',
-                        'Hazard of Death', 'Probability of\nDischarge to Non-Home'))
+                        'Probability of Survival', 'Probability of\nDischarge to Non-Home'))
 
 ## Plotting function
 create.nutric.plot <-
@@ -867,7 +867,7 @@ create.nutric.plot <-
       nutric.plot <- nutric.plot + facet_wrap(~ version.f, scales = 'free_x')
     }
     
-    if(outcome == 'dchome'){
+    if(outcome %in% c('dchome', 'ltmort')){
       nutric.plot <- nutric.plot +
         scale_y_continuous(limits = c(0, 1), name = paste('Adjusted', outcome.ylab))
     } else{
@@ -1301,36 +1301,40 @@ Surv.noil6.12m <- with(modeldata.noil6.survivors, {
 ## -- Run models -----------------------------------------------------------------------------------
 ltmort.il6.3 <- fit.mult.impute(as.formula(paste('Surv.il6.3m', lt.il6.rh, sep = ' ~ ')),
                                 fitter = cph,
+                                x = TRUE, y = TRUE,
                                 xtrans = mice.il6.survivors,
                                 data = modeldata.il6.survivors)
 
 ltmort.noil6.3 <- fit.mult.impute(as.formula(paste('Surv.noil6.3m', lt.noil6.rh, sep = ' ~ ')),
                                   fitter = cph,
+                                  x = TRUE, y = TRUE,
                                   xtrans = mice.noil6.survivors,
                                   data = modeldata.noil6.survivors)
 
 ltmort.il6.12 <- fit.mult.impute(as.formula(paste('Surv.il6.12m', lt.il6.rh, sep = ' ~ ')),
                                  fitter = cph,
+                                 x = TRUE, y = TRUE,
                                  xtrans = mice.il6.survivors,
                                  data = modeldata.il6.survivors)
 
 ltmort.noil6.12 <- fit.mult.impute(as.formula(paste('Surv.noil6.12m', lt.noil6.rh, sep = ' ~ ')),
                                    fitter = cph,
+                                   x = TRUE, y = TRUE,
                                    xtrans = mice.noil6.survivors,
                                    data = modeldata.noil6.survivors)
 
 ## -- Calculate HRs + CIs, predicted values --------------------------------------------------------
 options(datadist = 'dd.il6.survivors')
 ltmort.sum.il6.3 <- summary(ltmort.il6.3)
-ltmort.pred.il6.3 <- Predict(ltmort.il6.3, nutric.il6 = NA, fun = exp)
+ltmort.pred.il6.3 <- Predict(ltmort.il6.3, nutric.il6 = NA, time = 90)
 ltmort.sum.il6.12 <- summary(ltmort.il6.12)
-ltmort.pred.il6.12 <- Predict(ltmort.il6.12, nutric.il6 = NA, fun = exp)
+ltmort.pred.il6.12 <- Predict(ltmort.il6.12, nutric.il6 = NA, time = 355)
 
 options(datadist = 'dd.noil6.survivors')
 ltmort.sum.noil6.3 <- summary(ltmort.noil6.3)
-ltmort.pred.noil6.3 <- Predict(ltmort.noil6.3, nutric.noil6 = NA, fun = exp)
+ltmort.pred.noil6.3 <- Predict(ltmort.noil6.3, nutric.noil6 = NA, time = 90)
 ltmort.sum.noil6.12 <- summary(ltmort.noil6.12)
-ltmort.pred.noil6.12 <- Predict(ltmort.noil6.12, nutric.noil6 = NA, fun = exp)
+ltmort.pred.noil6.12 <- Predict(ltmort.noil6.12, nutric.noil6 = NA, time = 355)
 
 ltmort.nutric.plot <- create.nutric.plot('ltmort')
 ltmort.nutric.table <- results.table('ltmort')
