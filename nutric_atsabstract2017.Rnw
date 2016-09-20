@@ -85,7 +85,8 @@ brain.oneobs$cohort.allpts <- with(brain.oneobs, {
 n.allpts <- sum(brain.oneobs$cohort.allpts)
 
 ## All patients who can be included in in-hospital mortality (exclude anyone who never had
-## mental status measured)
+## mental status measured or who had missing baseline covariates; daily sepsis and SOFA will be
+## imputed using LOCF)
 no.mental.data <- brain.daily %>%
   group_by(id) %>%
   summarise(n.mental = sum(!is.na(mental.stat.imp))) %>%
@@ -93,7 +94,15 @@ no.mental.data <- brain.daily %>%
 no.mental.pts <- no.mental.data$id
 n.nomental <- length(no.mental.pts)
 
-brain.oneobs$cohort.inhosp <- with(brain.oneobs, cohort.allpts & !(id %in% no.mental.pts))
+brain.oneobs$no.days.mental <- brain.oneobs$id %in% no.mental.pts
+
+## Determine how many patients are missing baseline covariates
+baseline.covar <- c('edu', 'frailty', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e')
+brain.oneobs$miss.base.covar <- rowSums(is.na(brain.oneobs[,baseline.covar])) > 0
+
+## Cohort for in-hospital mortality = >=1 day with mental status + no missing baseline covariates
+brain.oneobs$cohort.inhosp <-
+  with(brain.oneobs, cohort.allpts & !(no.days.mental | miss.base.covar))
 n.inhosp <- sum(brain.oneobs$cohort.inhosp)
 
 ## All patients with usable data and a full NUTRIC score at baseline
@@ -212,7 +221,8 @@ desc.vars <- c('age.enroll', 'sex.pp', 'race.pp', 'edu', 'charlson.score', 'num.
                'num.apache', 'sofa', 'nutric.il6', 'nutric.atrisk.il6', 'nutric.noil6',
                'nutric.atrisk.noil6', 'mean.benz.icu', 'mean.op.new.icu', 'mean.prop.icu',
                'mean.dex.icu', 'ever.vent.s', 'vent.los.tot.eo', 'ever.del.s.imp',
-               'del.s.imp.eo', 'ever.coma.s.imp', 'coma.s.imp.eo', 'died.inhosp', 'hospdis.loc')
+               'del.s.imp.eo', 'ever.coma.s.imp', 'coma.s.imp.eo', 'died.inhosp', 'hospdis.loc',
+               'died.brain.90', 'died.brain.365')
 lt.vars <- c('rbans.global.3', 'rbans.global.12', 'trail.b.3', 'trail.b.12', 'adl.3', 'adl.12',
              'faq.3', 'faq.12', 'sf36.pcs.3', 'sf36.pcs.12', 'sf36.mcs.3', 'sf36.mcs.12')
 
@@ -256,6 +266,8 @@ label(desc.data.all$ever.coma.s.imp) <- 'Comatose during study period'
 label(desc.data.all$coma.s.imp.eo) <- 'Days coma among exposed'
 label(desc.data.all$hospdis.loc) <- 'Discharge location'
 label(desc.data.all$died.inhosp) <- 'Died in hospital'
+label(desc.data.all$died.brain.90) <- '90-day mortality'
+label(desc.data.all$died.brain.365) <- '365-day mortality'
 label(desc.data.all$rbans.global.3) <- 'RBANS global, 3m'
 label(desc.data.all$rbans.global.12) <- 'RBANS global, 12m'
 label(desc.data.all$trail.b.3) <- 'Trails B, 3m'
@@ -386,11 +398,15 @@ ggsurv(ltmort.bynutric, cens.col = '#BA6E00', cens.shape = NA) +
 All analyses are done using multivariable regression; specific types of regression are noted for
 each outcome. All hypothesis testing is done using the \Sexpr{use.method} method.
 
-To avoid bias as much as possible, models for all long-term cognitive, disability and HRQOL outcomes
-are done using multiple imputation. All patients with at least partial outcomes data at that time
-point are included in the cohort; we use multiple imputation (specifically, predictive mean
-matching) to impute both missing covariates and missing outcomes for all of these patients. Amounts
-of missing data are reported for each model in section \ref{section:missingness}.
+To avoid bias as much as possible, models for all long-term mortality, cognitive, disability and
+HRQOL outcomes are done using multiple imputation. All patients with at least partial outcomes data
+at that time point are included in the cohort; we use multiple imputation (specifically, predictive
+mean matching) to impute both missing covariates and missing outcomes for all of these patients. Due
+to the complexity of imputing both baseline and time-varying covariates in time-varying Cox models,
+and the low proportion of missingness
+(\Sexpr{round((sum(!(brain.oneobs$cohort.inhosp)) / nrow(brain.oneobs))*100)}\% of patients total),
+and therefore low likelihood of bias, only patients with complete data are included in in-hospital
+mortality models. Details of missing data are reported for each model in section \ref{section:missingness}.
 
 All models include the following covariates (with slight changes as noted for in-hospital mortality;
 due to the potential for immortal time bias with this outcome, we will use time-varying Cox models
@@ -443,8 +459,9 @@ brain.daily <- as.data.frame(brain.daily)
 ## Create time-varying data sets
 death.inhosp.vars.tv <- c('daily.sofa.mod.locf', 'sevsepsis.imp', 'mental.stat.imp', 'on.vent.l24')
 
-death.inhosp.orgdata <- brain.daily[brain.daily$id %in% subset(brain.oneobs, cohort.inhosp)$id,
-                                    c('id', 'study.day', death.inhosp.vars.tv)]
+death.inhosp.orgdata <- brain.daily[,c('id', 'study.day', death.inhosp.vars.tv)] %>%
+  left_join(dplyr::select(brain.oneobs, id, cohort.inhosp), by = 'id') %>%
+  filter(cohort.inhosp)
 
 death.inhosp.data <- timevarying.data(org.data = death.inhosp.orgdata,
                                       time.var = 'days.deathlast.inhosp.s',
@@ -457,16 +474,19 @@ death.inhosp.vars.base <-
 
 death.inhosp.noil6.data <- left_join(death.inhosp.data,
                                      brain.oneobs[,c('id', death.inhosp.vars.base, 'nutric.noil6')],
-                                     by = 'id')
+                                     by = 'id') %>%
+  filter(complete.cases(.))
+
 death.inhosp.il6.data <-
   left_join(subset(death.inhosp.data, id %in% subset(brain.oneobs, cohort.inhosp.il6)$id),
             brain.oneobs[,c('id', death.inhosp.vars.base, 'nutric.il6')],
-            by = 'id')
+            by = 'id') %>%
+  filter(complete.cases(.))
 
-## Imputation for in-hospital mortality
-mice.il6.inhosp <- mice(data = death.inhosp.il6.data, m = 10, visitSequence = 'monotone', seed = 56)
-mice.noil6.inhosp <-
-  mice(data = death.inhosp.noil6.data, m = 10, visitSequence = 'monotone', seed = 56)
+# ## Imputation for in-hospital mortality
+# mice.il6.inhosp <- mice(data = death.inhosp.il6.data, m = 10, visitSequence = 'monotone', seed = 56)
+# mice.noil6.inhosp <-
+#   mice(data = death.inhosp.noil6.data, m = 10, visitSequence = 'monotone', seed = 56)
 
 ## -- Long-term mortality and discharge location (hospital survivor cohorts) -----------------------
 ## List of model covariates for long-term outcomes
@@ -1093,6 +1113,12 @@ missing.survivors.df <- cbind(missing.survivors.info[[1]]['varname'],
                                                     FUN = function(m){ m[,'npct'] })))
 missing.survivors.df <-
   subset(missing.survivors.df, !(varname %in% c('days.deathlast', 'died.brain')))
+
+## Add total Ns to the top
+survivors.ns.df <- as.data.frame(t(c('Overall N', survivors.ns)))
+names(survivors.ns.df) <- names(missing.survivors.df)
+missing.survivors.df <- rbind(survivors.ns.df, missing.survivors.df)
+
 rownames(missing.survivors.df) <- missing.survivors.df$varname
 
 ## Create table for all long-term outcomes (same amount of missingness in each)
@@ -1103,23 +1129,77 @@ missing.lt.info <- lapply(1:length(lt.mice),
                           FUN = function(m){ descmiss.mice(get(lt.mice[m]), lt.ns[m]) })
 missing.lt.df <- cbind(missing.lt.info[[1]]['varname'],
                        do.call(cbind, lapply(missing.lt.info, FUN = function(m){ m[,'npct'] })))
+
+## Add total Ns to the top
+lt.ns.df <- as.data.frame(t(c('Overall N', lt.ns)))
+names(lt.ns.df) <- names(missing.lt.df)
+missing.lt.df <- rbind(lt.ns.df, missing.lt.df)
+
 rownames(missing.lt.df) <- missing.lt.df$varname
 
 @
 
+\clearpage
 \subsection{Missingness for Each Cohort} \label{section:missingness}
-Tables \ref{table:survmissing} and \ref{table:ltmissing} show missing covariates and outcomes
-for, respectively, hospital survivors (used for discharge location and long-term mortality models) and long-term cognitive, disability and HRQOL cohorts.
+Table \ref{table:inhospmissing} presents details on patients excluded from the complete case analyses used for in-hospital mortality.
 
-<<printmissing, results = 'asis'>>=
+<<missinginhosp>>=
+missing.inhosp.ns <-
+  matrix(c(n.allpts,
+           nrow(subset(brain.oneobs, cohort.allpts & no.days.mental)),
+           nrow(subset(brain.oneobs, cohort.allpts & miss.base.covar)),
+           unlist(lapply(baseline.covar, FUN = function(v){
+             sum(is.na(subset(brain.oneobs, cohort.allpts & !no.days.mental)[,v]))
+           })),
+           sum(brain.oneobs$cohort.inhosp),
+           nrow(subset(brain.oneobs,
+                       cohort.allpts & !miss.base.covar & !no.days.mental & is.na(nutric.il6))),
+           nrow(subset(brain.oneobs,
+                       cohort.allpts & !miss.base.covar & !no.days.mental & !is.na(nutric.il6))),
+           nrow(subset(brain.oneobs,
+                       cohort.allpts & !miss.base.covar & !no.days.mental & is.na(nutric.noil6))),
+           nrow(subset(brain.oneobs,
+                       cohort.allpts & !miss.base.covar & !no.days.mental & !is.na(nutric.noil6)))),
+         ncol = 1)
+rownames(missing.inhosp.ns) <- c('Enrolled in BRAIN',
+                                 'No days with complete ICU data',
+                                 'Missing baseline covariates',
+                                 paste0('~~~', baseline.covar),
+                                 'Eligible for inclusion based on covariates',
+                                 'Missing NUTRIC with IL-6',
+                                 'Included in model with full NUTRIC',
+                                 'Missing NUTRIC without IL-6',
+                                 'Included in model with modified NUTRIC')
+         
+@
+
+<<printinhospmissing, results = 'asis'>>=
+latex(missing.inhosp.ns, file = '',
+      title = '',
+      where = '!h',
+      caption = 'Missing Data for In-Hospital Mortality Models',
+      caption.lot = 'Missing Data for In-Hospital Mortality Models',
+      label = 'table:inhospmissing',
+      rgroup = c('', 'Covariates', 'Main Exposure'),
+      n.rgroup = c(1, 10, 4),
+      colheads = 'N')
+
+@
+
+Tables \ref{table:survmissing} and \ref{table:ltmissing}
+show missing covariates and outcomes for, respectively, hospital survivors (used for discharge
+location and long-term mortality models) and long-term cognitive, disability and HRQOL cohorts; for
+these models, this missing data will be imputed.
+
+<<printltmissing, results = 'asis'>>=
 latex(missing.survivors.df[,2:3], file = '',
       title = '',
       where = '!h',
       caption = 'Missing Data for Discharge Location and Long-Term Mortality Models',
       caption.lot = 'Missing Data for Discharge, Long-Term Mortality Models',
       label = 'table:survmissing',
-      rgroup = c('Covariates', 'Outcomes'),
-      n.rgroup = c(13, 1),
+      rgroup = c('', 'Covariates', 'Outcomes'),
+      n.rgroup = c(1, 13, 1),
       colheads = c('With IL-6', 'Without IL-6'),
       col.just = rep('c', 2))
 
@@ -1129,8 +1209,8 @@ latex(missing.lt.df[,2:5], file = '',
       caption = 'Missing Data for Long-Term Outcome Models',
       caption.lot = 'Missing Data for Long-Term Outcome Models',
       label = 'table:ltmissing',
-      rgroup = c('Covariates', 'Outcomes'),
-      n.rgroup = c(13, 6),
+      rgroup = c('', 'Covariates', 'Outcomes'),
+      n.rgroup = c(1, 13, 6),
       colheads = rep(c('With IL-6', 'Without IL-6'), 2),
       col.just = rep('c', 4),
       cgroup = c('3 Months', '12 Months'),
@@ -1685,7 +1765,7 @@ There is a significant association between higher NUTRIC scores at baseline and 
 MCS scores at both 3 and 12 months after hospital discharge.
 
 Figure \ref{fig:printmcsmodels} shows the full relationships between baseline NUTRIC score and
-followup SF-36 MCS scores. Table \ref{table:Mcsresults} shows p-values for the total association
+followup SF-36 MCS scores. Table \ref{table:mcsresults} shows p-values for the total association
 of NUTRIC score with SF-36 MCS score and adjusted differences in SF-36 MCS scores between the 75th
 and the 25th percentiles of our population's NUTRIC scores.
   
