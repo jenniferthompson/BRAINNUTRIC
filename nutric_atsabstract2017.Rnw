@@ -548,6 +548,37 @@ mice.noil6.12 <- mice(data = modeldata.noil6.12, m = 10, visitSequence = 'monoto
 ## long-term results table to point out that this is not a typo/mistake
 nutric.note <- '\\emph{\\footnotesize{*There was so little difference in NUTRIC scores with and without IL-6 that the percentiles of both versions are the same.}}'
 
+## -- Functions for calculating HRs for mortality models -------------------------------------------
+## Extract a single HR from summary(cph)
+get.nutric.hr <- function(complevel,     ## Value to compare to reference level
+                          cphfit,        ## cph() fit
+                          xvar,          ## name of variable to get HR for
+                          reflevel = 0){ ## Reference level of xvar
+  take.cols <- c('Effect', 'Lower 0.95', 'Upper 0.95')
+  tmp <-
+    eval(parse(text = paste0('summary(cphfit, ', xvar, ' = c(', reflevel, ', ', complevel, '))')))
+  tmp2 <- as.data.frame(t(tmp[grep(xvar, rownames(tmp)) + 1, take.cols]))
+  names(tmp2) <- c('pointest', 'lcl', 'ucl')
+  tmp2$xval <- complevel
+  tmp2$xcomp <- paste(complevel, 'vs', reflevel)
+  tmp2
+}
+
+## Creates data set of all HRs for each NUTRIC score vs a reference level given a cph() fit
+calc.nutric.hrs <- function(cphfit, xvar = c('nutric.il6', 'nutric.noil6'), reflevel = 0){
+  if(!('cph' %in% class(cphfit))){
+    stop('cphfit must be of class cph')
+  }
+
+  ## Get unique values of given NUTRIC variable - will calculate HR for each vs   
+  unique.nutric <- sort(unique(brain.oneobs[,xvar]))
+  
+  ## Create data frame with one row per NUTRIC value
+  do.call(rbind,
+          lapply(unique.nutric,
+                 FUN = get.nutric.hr, cphfit = cphfit, xvar = xvar, reflevel = reflevel))
+}
+
 ## -- Functions for calculating & plotting results of negative binomial models ---------------------
 ## -- Step 1: Create design matrix for a given set of covariates -----------------------------------
 create.nutric.designmat <- function(formula.rh = c(lt.il6.rh, lt.noil6.rh),
@@ -1284,8 +1315,9 @@ dchome.nutric.plot
 
 \clearpage
 \section{NUTRIC vs Long-Term Mortality}
-Results for the associations between NUTRIC scores and mortality after hospital discharge follow.
-All models are Cox proportional hazards models using multiple imputation.
+Results follow for the associations between NUTRIC scores and mortality after hospital discharge,
+among hospital survivors only. All models are Cox proportional hazards models using multiple
+imputation.
 
 <<mortmodels>>=
 ## -- Create Surv objects --------------------------------------------------------------------------
@@ -1323,21 +1355,69 @@ ltmort.noil6.12 <- fit.mult.impute(as.formula(paste('Surv.noil6.12m', lt.noil6.r
                                    xtrans = mice.noil6.survivors,
                                    data = modeldata.noil6.survivors)
 
-## -- Calculate HRs + CIs, predicted values --------------------------------------------------------
+## -- Calculate and plot HRs + CIs -----------------------------------------------------------------
+## HRs for 75th vs 25th percentiles
 options(datadist = 'dd.il6.survivors')
 ltmort.sum.il6.3 <- summary(ltmort.il6.3)
-ltmort.pred.il6.3 <- Predict(ltmort.il6.3, nutric.il6 = NA, time = 90)
 ltmort.sum.il6.12 <- summary(ltmort.il6.12)
-ltmort.pred.il6.12 <- Predict(ltmort.il6.12, nutric.il6 = NA, time = 355)
 
 options(datadist = 'dd.noil6.survivors')
 ltmort.sum.noil6.3 <- summary(ltmort.noil6.3)
-ltmort.pred.noil6.3 <- Predict(ltmort.noil6.3, nutric.noil6 = NA, time = 90)
 ltmort.sum.noil6.12 <- summary(ltmort.noil6.12)
-ltmort.pred.noil6.12 <- Predict(ltmort.noil6.12, nutric.noil6 = NA, time = 355)
 
-ltmort.nutric.plot <- create.nutric.plot('ltmort')
 ltmort.nutric.table <- results.table('ltmort')
+
+## Plot multiple HRs
+## Which NUTRIC value should be used as reference?
+nutric.ref <- median(brain.oneobs$nutric.il6, na.rm = TRUE)
+
+ltmort.hrs.il6.3 <- calc.nutric.hrs(ltmort.il6.3, 'nutric.il6', reflevel = nutric.ref)
+ltmort.hrs.il6.3$time <- 1; ltmort.hrs.il6.3$version <- 1
+ltmort.hrs.il6.12 <- calc.nutric.hrs(ltmort.il6.12, 'nutric.il6', reflevel = nutric.ref)
+ltmort.hrs.il6.12$time <- 2; ltmort.hrs.il6.12$version <- 1
+
+ltmort.hrs.noil6.3 <- calc.nutric.hrs(ltmort.noil6.3, 'nutric.noil6', reflevel = nutric.ref)
+ltmort.hrs.noil6.3$time <- 1; ltmort.hrs.noil6.3$version <- 2
+ltmort.hrs.noil6.12 <- calc.nutric.hrs(ltmort.noil6.12, 'nutric.noil6', reflevel = nutric.ref)
+ltmort.hrs.noil6.12$time <- 2; ltmort.hrs.noil6.12$version <- 2
+
+ltmort.hrs.all <-
+  bind_rows(ltmort.hrs.il6.3, ltmort.hrs.il6.12, ltmort.hrs.noil6.3, ltmort.hrs.noil6.12) %>%
+  mutate(time.f = factor(time, levels = 1:2, labels = c('3 Months', '12 Months')),
+         version.f = factor(version, levels = 1:2, labels = c('With IL-6', 'Without IL-6')))
+
+ltmort.nutric.plot <- ggplot(data = ltmort.hrs.all, aes(x = xval, y = pointest)) +
+  geom_hline(yintercept = 1, colour = 'grey90', size = 2) +
+  facet_grid(time.f ~ version.f, scales = 'free_x') +
+  geom_pointrange(aes(ymin = lcl, ymax = ucl), colour = '#003D79') +
+  scale_x_continuous(name = 'NUTRIC Score at ICU Admission', breaks = 0:10) +
+  scale_y_continuous(name = paste('Adjusted Hazard Ratio for Death\nReference =', nutric.ref),
+                     breaks = c(0, 0.5, 1, 2, 4, 8),
+                     trans = 'log') +
+  theme_bw()
+
+# ## Test with survest()
+# survest.df <- data.frame(nutric.noil6 = 0:9,
+#                          edu = rep(dd.noil6.3$limits$edu[2], 10),
+#                          frailty.num = rep(dd.noil6.3$limits$frailty.num[2], 10),
+#                          sex.pp = rep(dd.noil6.3$limits$sex.pp[2], 10),
+#                          bmi = rep(dd.noil6.3$limits$bmi[2], 10),
+#                          iqcode.score.e = rep(dd.noil6.3$limits$iqcode.score.e[2], 10),
+#                          adl.e = rep(dd.noil6.3$limits$adl.e[2], 10),
+#                          faq.e = rep(dd.noil6.3$limits$faq.e[2], 10),
+#                          mean.modsofa.icu = rep(dd.noil6.3$limits$mean.modsofa.icu[2], 10),
+#                          icudays.sevseptic.s = rep(dd.noil6.3$limits$icudays.sevseptic.s[2], 10),
+#                          del.s.imp = rep(dd.noil6.3$limits$del.s.imp[2], 10),
+#                          coma.s.imp = rep(dd.noil6.3$limits$coma.s.imp[2], 10),
+#                          vent.los.tot.s = rep(dd.noil6.3$limits$vent.los.tot.s[2], 10))
+# 
+# survest.ltmort.noil6.3 <- survest(ltmort.noil6.3, newdata = survest.df, times = 90)
+# with(survest.ltmort.noil6.3, cbind(surv, lower, upper))
+# Predict(ltmort.noil6.3, nutric.noil6 = NA, time = 90)[,c('yhat', 'lower', 'upper')]
+# 
+# survest.ltmort.noil6.12 <- survest(ltmort.noil6.12, newdata = survest.df[1,], times = c(90, 180, 350))
+# 
+# survest(ltmort.noil6.12, newdata = survest.df[1,], times = c(365))
 
 @
 
@@ -1346,7 +1426,8 @@ months after hospital discharge.
 
 Table \ref{table:ltmortresults} shows p-values for the total association of NUTRIC score with
 long-term mortality and hazard ratios comparing the 75th to the 25th percentiles of our population's
-NUTRIC scores.
+NUTRIC scores. Figure \ref{fig:printltmortmodels} shows hazard ratios comparing each NUTRIC value to
+\Sexpr{nutric.ref}, our enrolled cohort's median.
   
 <<printltmortmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Mortality at 3 \\& 12 Months'>>=
 latex(ltmort.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
