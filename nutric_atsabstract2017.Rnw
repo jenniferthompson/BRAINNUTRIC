@@ -179,7 +179,7 @@ brain.oneobs$dc.home <- with(brain.oneobs, factor(ifelse(is.na(hospdis.loc), NA,
 cohort.ns <- data.frame(cohort = c('Enrolled patients',
                                    'In-hospital mortality',
                                    'Discharge location and long-term mortality',
-                                   'Long-term cognitive and disability',
+                                   'Long-term cognitive, disability, HRQOL',
                                    '~~~3 months',
                                    '~~~12 months'),
                         n.il6 = c(n.allpts.il6, n.inhosp.il6, n.survivors.il6,
@@ -188,11 +188,9 @@ cohort.ns <- data.frame(cohort = c('Enrolled patients',
 
 @
 
-There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. Of these, \Sexpr{n.nomental} patients never had a mental status measured and could not be included in
-time-varying analyses for in-hospital mortality. Table \ref{table:ncohort} describes the number of
-patients included in each analysis. We will not impute missing NUTRIC scores due to the involvement
-of IL-6; therefore different numbers of patients will be included in models using the full vs. the
-modified NUTRIC score.
+There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. Table \ref{table:ncohort} describes the number of patients included in each analysis. We will not impute
+missing NUTRIC scores due to the involvement of IL-6; therefore different numbers of patients will
+be included in models using the full vs. the modified NUTRIC score. Patients are included in long-term cognitive, disability, and HRQOL analyses if they have at least partial outcomes data at that time point (ie, at least one of MMSE, Trailmaking A or B, any RBANS domain, FAQ, ADL, and/or SF-36 PCS or MCS).
 
 <<printncohort, results = 'asis'>>=
 latex(cohort.ns, file = '',
@@ -404,17 +402,16 @@ at that time point are included in the cohort; we use multiple imputation (speci
 mean matching) to impute both missing covariates and missing outcomes for all of these patients. Due
 to the complexity of imputing both baseline and time-varying covariates in time-varying Cox models,
 and the low proportion of missingness
-(\Sexpr{round((sum(!(brain.oneobs$cohort.inhosp)) / nrow(brain.oneobs))*100)}\% of patients total),
+(\Sexpr{round((sum(!(brain.oneobs$cohort.inhosp)) / nrow(brain.oneobs))*100)}\% of patients total)
 and therefore low likelihood of bias, only patients with complete data are included in in-hospital
 mortality models. Details of missing data are reported for each model in section \ref{section:missingness}.
 
-All models include the following covariates (with slight changes as noted for in-hospital mortality;
-due to the potential for immortal time bias with this outcome, we will use time-varying Cox models
-which incorporate daily variables rather than summary variables). Most continuous covariates (noted
-below) were allowed to have a nonlinear relationship with the outcomes using restricted cubic
-splines; other continuous covariates were forced to have a linear relationship, due both to limited
-sample size and to lack of variability in those covariates (eg, over 75\% of baseline ADL values
-were 0).
+All models include the following covariates, with changes as noted for in-hospital mortality; due to
+the potential for immortal time bias with this outcome, we will use time-varying Cox models which
+incorporate daily variables rather than summary variables. Most continuous covariates (noted below)
+were allowed to have a nonlinear relationship with the outcomes using restricted cubic splines;
+other continuous covariates were forced to have a linear relationship, due both to limited sample
+size and to lack of variability in those covariates (eg, over 75\% of baseline ADL values were 0).
 
 \begin{itemize}
 \item Baseline characteristics
@@ -482,11 +479,6 @@ death.inhosp.il6.data <-
             brain.oneobs[,c('id', death.inhosp.vars.base, 'nutric.il6')],
             by = 'id') %>%
   filter(complete.cases(.))
-
-# ## Imputation for in-hospital mortality
-# mice.il6.inhosp <- mice(data = death.inhosp.il6.data, m = 10, visitSequence = 'monotone', seed = 56)
-# mice.noil6.inhosp <-
-#   mice(data = death.inhosp.noil6.data, m = 10, visitSequence = 'monotone', seed = 56)
 
 ## -- Long-term mortality and discharge location (hospital survivor cohorts) -----------------------
 ## List of model covariates for long-term outcomes
@@ -1028,8 +1020,9 @@ nb.results.data <- function(outcome = c('adl', 'faq')){
 }
 
 ## -- rms models, exponentiating point estimates for mort, disloc outcomes -------------------------
-rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome')){
-  if(outcome == 'dchome'){
+rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome',
+                                         'inhospmort')){
+  if(outcome %in% c('dchome', 'inhospmort')){
     mod.il6 <- get(paste0(outcome, '.il6'))
     mod.noil6 <- get(paste0(outcome, '.noil6'))
     
@@ -1063,7 +1056,7 @@ rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmor
     
   }
   
-  if(outcome %in% c('ltmort', 'dchome')){
+  if(outcome %in% c('ltmort', 'dchome', 'inhospmort')){
     exp.cols <- c(4, 6, 7)
     diffci.list <- lapply(diffci.list, FUN = function(x){
       x[exp.cols] <- exp(x[exp.cols])
@@ -1081,11 +1074,18 @@ rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmor
   names(diffcip.data) <- c('ref.val', 'comp.val', 'diff', 'pointest', 'se', 'lcl', 'ucl',
                            'type', 'pval')
 
-  if(outcome == 'dchome'){
-    diffcip.data$time.f <- factor(c(0, 0), levels = 0, labels = c('Discharge'))
+  if(outcome %in% c('inhospmort', 'dchome')){
+    if(outcome == 'dchome'){
+      tlevel <- 1
+      tlabel <- 'Discharge'
+    } else{
+      tlevel <- 0
+      tlabel <- 'In-Hospital'
+    }
+    diffcip.data$time.f <- factor(rep(tlevel, 2), levels = tlevel, labels = tlabel)
     diffcip.data$version.f <- factor(c(1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
   } else{
-    diffcip.data$time.f <- factor(c(1, 1, 2, 2), levels = 1:2, labels = c('3 Months', '12 Months'))
+    diffcip.data$time.f <- factor(c(2, 2, 3, 3), levels = 2:3, labels = c('3 Months', '12 Months'))
     diffcip.data$version.f <-
       factor(c(1, 2, 1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
   }
@@ -1102,7 +1102,8 @@ rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmor
 
 ## -- Step 7: Create data set of results from [model type].results.data() formatted for table ------
 results.table <-
-  function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome')){
+  function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome',
+                       'inhospmort')){
     if(outcome %in% c('adl', 'faq')){
       results.data <- nb.results.data(outcome)
     } else{
@@ -1168,6 +1169,34 @@ missing.lt.df <- rbind(lt.ns.df, missing.lt.df)
 
 rownames(missing.lt.df) <- missing.lt.df$varname
 
+## -- datadist() setup for all cohorts -------------------------------------------------------------
+## n.unique set to 11 so that all NUTRIC scores are predicted as integers (no trying to use 7.82...)
+ddvars <- c(lt.covars, 'nutric.il6', 'nutric.noil6',
+            paste0('rbans.global.', c(3, 12)), paste0('trail.b.', c(3, 12)), 'dc.home')
+dd.il6.survivors <- datadist(subset(brain.oneobs, cohort.survivors.il6)[,ddvars], n.unique = 11)
+dd.noil6.survivors <- datadist(subset(brain.oneobs, cohort.survivors)[,ddvars], n.unique = 11)
+dd.il6.3 <- datadist(subset(brain.oneobs, cohort.3m.il6)[,ddvars], n.unique = 11)
+dd.noil6.3 <- datadist(subset(brain.oneobs, cohort.3m)[,ddvars], n.unique = 11)
+dd.il6.12 <- datadist(subset(brain.oneobs, cohort.12m.il6)[,ddvars], n.unique = 11)
+dd.noil6.12 <- datadist(subset(brain.oneobs, cohort.12m)[,ddvars], n.unique = 11)
+
+## Which NUTRIC value should be used as reference for HR plots?
+## Use floor() to make sure it's an integer
+nutric.ref <- floor(median(subset(brain.oneobs, cohort.inhosp.il6)$nutric.il6, na.rm = TRUE))
+
+## Which NUTRIC values should be used for estimates in summary.rms()? For some reason datadist is
+## being weird.
+get.nutric.pcts <- function(cvar, nvar){
+  quantile(brain.oneobs[brain.oneobs[,cvar], nvar], probs = c(0.25, 0.75), na.rm = TRUE)
+}
+
+nutric.il6.pct.inhosp <- get.nutric.pcts('cohort.inhosp.il6', 'nutric.il6')
+nutric.noil6.pct.inhosp <- get.nutric.pcts('cohort.inhosp', 'nutric.noil6')
+nutric.il6.pct.survivors <- get.nutric.pcts('cohort.survivors.il6', 'nutric.il6')
+nutric.noil6.pct.survivors <- get.nutric.pcts('cohort.survivors', 'nutric.noil6')
+nutric.il6.pct.lt <- get.nutric.pcts('cohort.lt.il6', 'nutric.il6')
+nutric.noil6.pct.lt <- get.nutric.pcts('cohort.lt', 'nutric.noil6')
+
 @
 
 \clearpage
@@ -1217,10 +1246,10 @@ latex(missing.inhosp.ns, file = '',
 
 @
 
-Tables \ref{table:survmissing} and \ref{table:ltmissing}
-show missing covariates and outcomes for, respectively, hospital survivors (used for discharge
-location and long-term mortality models) and long-term cognitive, disability and HRQOL cohorts; for
-these models, this missing data will be imputed.
+Tables \ref{table:survmissing} and \ref{table:ltmissing} show missing covariates and outcomes for,
+respectively, hospital survivors (used for discharge location and long-term mortality models) and
+long-term cognitive, disability and HRQOL cohorts; for these models, this missing data will be
+imputed.
 
 <<printltmissing, results = 'asis'>>=
 latex(missing.survivors.df[,2:3], file = '',
@@ -1250,6 +1279,104 @@ latex(missing.lt.df[,2:5], file = '',
 @
 
 \clearpage
+\section{NUTRIC vs In-Hospital Mortality}
+Results follow for the associations between NUTRIC scores and in-hospital mortality during the 30-day BRAIN study period. Both models are Cox proportional hazards models using time-dependent covariates for daily modified SOFA, severe sepsis, mental status, and ventilator status. Only patients (and patient-days) with complete data are included in this complete case analysis; please see Section \ref{section:missingness} for details on missingness in this cohort.
+
+<<inhospmortmodels>>=
+## -- Model setup ----------------------------------------------------------------------------------
+Surv.il6.inhosp <- with(death.inhosp.il6.data, {
+  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
+Surv.noil6.inhosp <- with(death.inhosp.noil6.data, {
+  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
+
+inhospmort.covar.rh <- 'rcs(edu, 3) + frailty.num + sex.pp + rcs(bmi, 3) + iqcode.score.e + adl.e + rcs(faq.e, 3) + rcs(daily.sofa.mod.locf, 3) + sevsepsis.imp + mental.stat.imp + on.vent.l24'
+
+inhospmort.il6.rh <- paste(inhospmort.covar.rh, '+ rcs(nutric.il6, 3)')
+inhospmort.noil6.rh <- paste(inhospmort.covar.rh, '+ rcs(nutric.noil6, 3)')
+
+## Need to set datadist for summary.rms() to work, but will use NUTRIC values from main cohort;
+## multiple records per patient would mess up percentile calculations otherwise
+dd.inhosp.il6 <- datadist(death.inhosp.il6.data)
+dd.inhosp.noil6 <- datadist(death.inhosp.noil6.data)
+
+## -- Run models -----------------------------------------------------------------------------------
+inhospmort.il6 <- cph(as.formula(paste('Surv.il6.inhosp', inhospmort.il6.rh, sep = ' ~ ')),
+                      x = TRUE, y = TRUE, data = death.inhosp.il6.data)
+
+inhospmort.noil6 <- cph(as.formula(paste('Surv.noil6.inhosp', inhospmort.noil6.rh, sep = ' ~ ')),
+                        x = TRUE, y = TRUE, data = death.inhosp.noil6.data)
+
+## -- Calculate and plot HRs + CIs -----------------------------------------------------------------
+## HRs for 75th vs 25th percentiles
+options(datadist = 'dd.inhosp.il6')
+inhospmort.sum.il6 <- summary(inhospmort.il6, nutric.il6 = nutric.il6.pct.inhosp)
+inhospmort.hrs.il6 <- calc.nutric.hrs(inhospmort.il6, 'nutric.il6', reflevel = nutric.ref)
+inhospmort.hrs.il6$version <- 1
+
+options(datadist = 'dd.inhosp.noil6')
+inhospmort.sum.noil6 <- summary(inhospmort.noil6, nutric.noil6 = nutric.noil6.pct.inhosp)
+inhospmort.hrs.noil6 <- calc.nutric.hrs(inhospmort.noil6, 'nutric.noil6', reflevel = nutric.ref)
+inhospmort.hrs.noil6$version <- 2
+
+## Create results table
+inhospmort.nutric.table <- results.table('inhospmort')
+
+## Plot multiple HRs
+inhospmort.hrs.all <-
+  bind_rows(inhospmort.hrs.il6, inhospmort.hrs.noil6) %>%
+  mutate(version.f = factor(version, levels = 1:2, labels = c('With IL-6', 'Without IL-6')))
+
+inhospmort.nutric.plot <- ggplot(data = inhospmort.hrs.all, aes(x = xval, y = pointest)) +
+  geom_hline(yintercept = 1, colour = 'grey90', size = 2) +
+  facet_wrap(~ version.f, nrow = 1, scales = 'free_x') +
+  geom_pointrange(aes(ymin = lcl, ymax = ucl), colour = '#003D79') +
+  scale_x_continuous(name = 'NUTRIC Score at ICU Admission', breaks = 0:10) +
+  scale_y_continuous(name = paste('Adjusted Hazard Ratio for Death\nReference =', nutric.ref),
+                     breaks = c(0, 0.5, 1, 2, 4, 8),
+                     trans = 'log') +
+  theme_bw()
+
+@
+
+We see no meaningful association between NUTRIC score at baseline and in-hospital mortality up to 30 days.
+
+Table \ref{table:inhospmortresults} shows p-values for the total association of NUTRIC score with
+in-hospital mortality and hazard ratios comparing the 75th to the 25th percentiles of our population's NUTRIC scores. Figure \ref{fig:printinhospmortmodels} shows hazard ratios comparing each NUTRIC value to \Sexpr{nutric.ref}, our complete case cohort's median and thus representing an ``average"
+patient. Figure \ref{fig:printinhospexplore} shows raw (unadjusted) times to in-hospital death or discharge by full NUTRIC score at ICU admission.
+  
+<<printinhospmortmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs In-Hospital Mortality up to 30 Days', fig.height = 2.9>>=
+latex(inhospmort.nutric.table[,c('comp.str.il6', 'peci.str.il6', 'pval.str.il6',
+                                 'comp.str.noil6', 'peci.str.noil6', 'pval.str.noil6')],
+      file = '',
+      where = '!h',
+      caption = 'NUTRIC Score at ICU Admission vs In-Hospital Mortality up to 30 Days',
+      caption.lot = 'NUTRIC vs In-Hospital Mortality',
+      label = 'table:inhospmortresults',
+      rowname = NULL,
+      colheads = rep(c('NUTRIC Score Comparison', 'HR (95\\% CI)', 'P-Value'), 2),
+      col.just = rep(c('c', rep('r', 2)), 2),
+      cgroup = c('NUTRIC with IL-6', 'NUTRIC without IL-6'),
+      n.cgroup = c(3, 3))
+
+inhospmort.nutric.plot
+
+@
+
+<<printinhospexplore, results = 'asis', fig.cap = 'Unadjusted Time to In-Hospital Death or Discharge by Modified NUTRIC', fig.height = 2.7>>=
+ggplot(data = subset(brain.oneobs, cohort.inhosp.il6),
+       aes(x = nutric.il6, y = days.deathlast.inhosp.s)) +
+  geom_boxplot(aes(group = nutric.il6), colour = 'grey50', outlier.shape = NA, fill = NA) +
+  geom_point(aes(colour = died.inhosp.s), position = position_jitter(width = 0.5), alpha = 0.5, size = 0.75) +
+  scale_x_continuous(breaks = 0:10) +
+  scale_colour_discrete(labels = c('Discharged', 'Died')) +
+  theme(#legend.position = 'bottom', legend.direction = 'horizontal',
+        legend.title = element_text(size = 6), legend.text = element_text(size = 6),
+        axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7))
+
+@
+
+\clearpage
 \section{NUTRIC vs Hospital Discharge Location}
 <<dchomemodels>>=
 ## -- Run models -----------------------------------------------------------------------------------
@@ -1264,19 +1391,12 @@ dchome.noil6 <- fit.mult.impute(as.formula(paste('dc.home', lt.noil6.rh, sep = '
                                 data = modeldata.noil6.survivors)
 
 ## -- Calculate ORs + CIs, predicted values --------------------------------------------------------
-## datadist() setup
-## n.unique set to 11 so that all NUTRIC scores are predicted as integers (no trying to use 7.82...)
-ddvars <- c(lt.covars, 'nutric.il6', 'nutric.noil6',
-            paste0('rbans.global.', c(3, 12)), paste0('trail.b.', c(3, 12)), 'dc.home')
-dd.il6.survivors <- datadist(subset(brain.oneobs, cohort.survivors.il6)[,ddvars], n.unique = 11)
-dd.noil6.survivors <- datadist(subset(brain.oneobs, cohort.survivors)[,ddvars], n.unique = 11)
-
 options(datadist = 'dd.il6.survivors')
-dchome.sum.il6 <- summary(dchome.il6)
+dchome.sum.il6 <- summary(dchome.il6, nutric.il6 = nutric.il6.pct.survivors)
 dchome.pred.il6 <- Predict(dchome.il6, nutric.il6 = NA, fun = plogis)
 
 options(datadist = 'dd.noil6.survivors')
-dchome.sum.noil6 <- summary(dchome.noil6)
+dchome.sum.noil6 <- summary(dchome.noil6, nutric.noil6 = nutric.noil6.pct.inhosp)
 dchome.pred.noil6 <- Predict(dchome.noil6, nutric.noil6 = NA, fun = plogis)
 
 dchome.nutric.plot <- create.nutric.plot('dchome')
@@ -1291,19 +1411,20 @@ There is a strong association between higher NUTRIC scores, with or without IL-6
 increased odds of being discharged to somewhere other than home.
 
 Table \ref{table:dchomeresults} shows p-values for the total association of NUTRIC score with
-discharge location and odds ratios comparing the 75th to the 25th percentiles of our population's
-NUTRIC scores.
+discharge location and odds ratios comparing the 75th to the 25th percentiles of our cohort of survivors' NUTRIC scores. Figure \ref{fig:printdchomemodels} shows the adjusted probability of being
+discharged to a location other than home for an otherwise ``average" patient, given a specific
+NUTRIC score at baseline.
   
 <<printdchomemodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home', fig.height=3.5>>=
 latex(dchome.nutric.table[,c('comp.str.il6', 'peci.str.il6', 'pval.str.il6',
-                            'peci.str.noil6', 'pval.str.noil6')],
+                             'peci.str.noil6', 'pval.str.noil6')],
      file = '',
      where = '!h',
      caption = 'NUTRIC Score at ICU Admission vs Discharge to Location Other than Home',
      caption.lot = 'NUTRIC vs Discharge Location',
      label = 'table:dchomeresults',
      rowname = NULL,
-     colheads = c('NUTRIC Score Comparison*', rep(c('OR (95\\% CI)', 'P-Value'), 2)),
+     colheads = c('NUTRIC Score Comparison*', rep(c('HR (95\\% CI)', 'P-Value'), 2)),
      col.just = c('c', rep('r', 4)),
      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
      n.cgroup = c(1, 2, 2),
@@ -1356,30 +1477,33 @@ ltmort.noil6.12 <- fit.mult.impute(as.formula(paste('Surv.noil6.12m', lt.noil6.r
                                    data = modeldata.noil6.survivors)
 
 ## -- Calculate and plot HRs + CIs -----------------------------------------------------------------
-## HRs for 75th vs 25th percentiles
+## Using IL-6
 options(datadist = 'dd.il6.survivors')
-ltmort.sum.il6.3 <- summary(ltmort.il6.3)
-ltmort.sum.il6.12 <- summary(ltmort.il6.12)
 
-options(datadist = 'dd.noil6.survivors')
-ltmort.sum.noil6.3 <- summary(ltmort.noil6.3)
-ltmort.sum.noil6.12 <- summary(ltmort.noil6.12)
+## HRs for 75th vs 25th percentiles
+ltmort.sum.il6.3 <- summary(ltmort.il6.3, nutric.il6 = nutric.il6.pct.survivors)
+ltmort.sum.il6.12 <- summary(ltmort.il6.12, nutric.il6 = nutric.il6.pct.survivors)
 
-ltmort.nutric.table <- results.table('ltmort')
-
-## Plot multiple HRs
-## Which NUTRIC value should be used as reference?
-nutric.ref <- median(brain.oneobs$nutric.il6, na.rm = TRUE)
-
+## HRs vs median
 ltmort.hrs.il6.3 <- calc.nutric.hrs(ltmort.il6.3, 'nutric.il6', reflevel = nutric.ref)
 ltmort.hrs.il6.3$time <- 1; ltmort.hrs.il6.3$version <- 1
 ltmort.hrs.il6.12 <- calc.nutric.hrs(ltmort.il6.12, 'nutric.il6', reflevel = nutric.ref)
 ltmort.hrs.il6.12$time <- 2; ltmort.hrs.il6.12$version <- 1
 
+## Without IL-6
+options(datadist = 'dd.noil6.survivors')
+
+## HRs for 75th vs 25th percentiles
+ltmort.sum.noil6.3 <- summary(ltmort.noil6.3, nutric.noil6 = nutric.noil6.pct.survivors)
+ltmort.sum.noil6.12 <- summary(ltmort.noil6.12, nutric.noil6 = nutric.noil6.pct.survivors)
+
 ltmort.hrs.noil6.3 <- calc.nutric.hrs(ltmort.noil6.3, 'nutric.noil6', reflevel = nutric.ref)
 ltmort.hrs.noil6.3$time <- 1; ltmort.hrs.noil6.3$version <- 2
 ltmort.hrs.noil6.12 <- calc.nutric.hrs(ltmort.noil6.12, 'nutric.noil6', reflevel = nutric.ref)
 ltmort.hrs.noil6.12$time <- 2; ltmort.hrs.noil6.12$version <- 2
+
+## Create results table and plot
+ltmort.nutric.table <- results.table('ltmort')
 
 ltmort.hrs.all <-
   bind_rows(ltmort.hrs.il6.3, ltmort.hrs.il6.12, ltmort.hrs.noil6.3, ltmort.hrs.noil6.12) %>%
@@ -1427,7 +1551,7 @@ months after hospital discharge.
 Table \ref{table:ltmortresults} shows p-values for the total association of NUTRIC score with
 long-term mortality and hazard ratios comparing the 75th to the 25th percentiles of our population's
 NUTRIC scores. Figure \ref{fig:printltmortmodels} shows hazard ratios comparing each NUTRIC value to
-\Sexpr{nutric.ref}, our enrolled cohort's median.
+\Sexpr{nutric.ref}, our cohort of survivors' median.
   
 <<printltmortmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Mortality at 3 \\& 12 Months'>>=
 latex(ltmort.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
@@ -1455,6 +1579,9 @@ Results for the associations between NUTRIC scores and long-term cognitive and d
 follow.
 
 \subsection{NUTRIC Scores vs ADLs (Katz ADL)}
+To examine the association between NUTRIC scores and Katz ADL scores among patients with long-term
+outcomes available, we used negative binomial regression.
+
 <<adlmodels>>=
 ## -- 3-month ADL ----------------------------------------------------------------------------------
 ## Fit models without NUTRIC score to use in pool.compare()
@@ -1485,10 +1612,10 @@ adl.nutric.table <- results.table('adl')
 @
 
 There is a significant association between NUTRIC scores at baseline and ADL scores at 3 months;
-this association is nonlinear, so please see Figure \ref{fig:printadlmodels} for a full picture.
-Generally, lower NUTRIC scores don't have much of a relationship with ADL scores; higher NUTRIC
-scores are associated with slightly higher ADL scores at 3 months. By 12 months, however, this
-association disappears.
+this association is nonlinear, so please see Figure \ref{fig:printadlmodels}, which presents adjusted Katz ADL scores for an otherwise ``average" patient with each NUTRIC value, for a full
+picture. Generally, lower NUTRIC scores don't have much of a relationship with ADL scores; higher
+NUTRIC scores are associated with slightly higher ADL scores at 3 months. By 12 months, however,
+this association disappears.
 
 Table \ref{table:adlresults} shows p-values for the total association of NUTRIC score with Katz ADL
 score and incidence rate ratios comparing the 75th to the 25th percentiles of our population's
@@ -1551,17 +1678,17 @@ faq.nutric.table <- results.table('faq')
 
 @
 
-We see no meaningful association between NUTRIC score at baseline and score on the Functional
-Activities Questionnaire at either followup time.
+To examine the association between NUTRIC scores and FAQ scores among patients with long-term
+outcomes available, we used negative binomial regression. We see no meaningful association between NUTRIC score at baseline and score on the Functional Activities Questionnaire at either followup time.
 
 Figure \ref{fig:printfaqmodels} shows the full relationships between baseline NUTRIC score and
-followup FAQ scores. Table \ref{table:faqresults} shows p-values for the total association of NUTRIC
-score with FAQ score and incidence rate ratios comparing the 75th to the 25th percentiles of our
-population's NUTRIC scores. Here, IRRs can be interpreted as the ratio of the FAQ score of someone
-at the 75th percentile of NUTRIC compared to someone with the 25th percentile. For example, an IRR
-of 1.5 would indicate that, all other things equal, someone whose NUTRIC was
-\Sexpr{quantile(subset(brain.oneobs, cohort.lt)$nutric.il6, na.rm = TRUE, probs = 0.75)} (75th
-percentile) had on average an FAQ score that was 50\% higher than someone with a NUTRIC of
+followup FAQ scores for an otherwise ``average" patient. Table \ref{table:faqresults} shows p-values
+for the total association of NUTRIC score with FAQ score and incidence rate ratios comparing the
+75th to the 25th percentiles of our population's NUTRIC scores. Here, IRRs can be interpreted as the
+ratio of the FAQ score of someone at the 75th percentile of NUTRIC compared to someone with the 25th
+percentile. For example, an IRR of 1.5 would indicate that, all other things equal, someone whose
+NUTRIC was \Sexpr{quantile(subset(brain.oneobs, cohort.lt)$nutric.il6, na.rm = TRUE, probs = 0.75)}
+(75th percentile) had on average an FAQ score that was 50\% higher than someone with a NUTRIC of
 \Sexpr{quantile(subset(brain.oneobs, cohort.lt)$nutric.il6, na.rm = TRUE, probs = 0.25)} (25th
 percentile).
   
@@ -1588,11 +1715,6 @@ faq.nutric.plot
 \clearpage
 \subsection{NUTRIC Scores vs Global Cognition (RBANS Global)}
 <<rbansmodels>>=
-dd.il6.3 <- datadist(subset(brain.oneobs, cohort.3m.il6)[,ddvars], n.unique = 11)
-dd.noil6.3 <- datadist(subset(brain.oneobs, cohort.3m)[,ddvars], n.unique = 11)
-dd.il6.12 <- datadist(subset(brain.oneobs, cohort.12m.il6)[,ddvars], n.unique = 11)
-dd.noil6.12 <- datadist(subset(brain.oneobs, cohort.12m)[,ddvars], n.unique = 11)
-
 ## -- Fit models -----------------------------------------------------------------------------------
 rbans.il6.3 <- fit.mult.impute(as.formula(paste('rbans.global.3', lt.il6.rh, sep = ' ~ ')),
                                fitter = ols,
@@ -1613,19 +1735,19 @@ rbans.noil6.12 <- fit.mult.impute(as.formula(paste('rbans.global.12', lt.noil6.r
 
 ## -- Calculate differences + CIs, predicted values ------------------------------------------------
 options(datadist = 'dd.il6.3')
-rbans.sum.il6.3 <- summary(rbans.il6.3)
+rbans.sum.il6.3 <- summary(rbans.il6.3, nutric.il6 = nutric.il6.pct.lt)
 rbans.pred.il6.3 <- Predict(rbans.il6.3, nutric.il6 = NA)
 
 options(datadist = 'dd.noil6.3')
-rbans.sum.noil6.3 <- summary(rbans.noil6.3)
+rbans.sum.noil6.3 <- summary(rbans.noil6.3, nutric.noil6 = nutric.noil6.pct.lt)
 rbans.pred.noil6.3 <- Predict(rbans.noil6.3, nutric.noil6 = NA)
 
 options(datadist = 'dd.il6.12')
-rbans.sum.il6.12 <- summary(rbans.il6.12)
+rbans.sum.il6.12 <- summary(rbans.il6.12, nutric.il6 = nutric.il6.pct.lt)
 rbans.pred.il6.12 <- Predict(rbans.il6.12, nutric.il6 = NA)
 
 options(datadist = 'dd.noil6.12')
-rbans.sum.noil6.12 <- summary(rbans.noil6.12)
+rbans.sum.noil6.12 <- summary(rbans.noil6.12, nutric.noil6 = nutric.noil6.pct.lt)
 rbans.pred.noil6.12 <- Predict(rbans.noil6.12, nutric.noil6 = NA)
 
 rbans.nutric.plot <- create.nutric.plot('rbans')
@@ -1633,13 +1755,13 @@ rbans.nutric.table <- results.table('rbans')
 
 @
 
-We see no meaningful association between NUTRIC score at baseline and RBANS global cognition score
-at either followup time.
+To examine the association between NUTRIC scores and RBANS global scores among patients with
+long-term outcomes available, we used linear regression. We see no meaningful association between NUTRIC score at baseline and RBANS global cognition score at either followup time.
 
 Figure \ref{fig:printrbansmodels} shows the full relationships between baseline NUTRIC score and
-followup RBANS scores. Table \ref{table:rbansresults} shows p-values for the total association of
-NUTRIC score with FAQ score and adjusted differences in RBANS scores between the 75th and the 25th
-percentiles of our population's NUTRIC scores.
+followup RBANS scores for otherwise ``average" patients. Table \ref{table:rbansresults} shows
+p-values for the total association of NUTRIC score with FAQ score and adjusted differences in RBANS
+scores between the 75th and the 25th percentiles of our population's NUTRIC scores.
   
 <<printrbansmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Global Cognition (RBANS Global Scores) at 3 \\& 12 Months'>>=
 latex(rbans.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
@@ -1684,19 +1806,19 @@ trailb.noil6.12 <- fit.mult.impute(as.formula(paste('trail.b.12', lt.noil6.rh, s
 
 ## -- Calculate differences + CIs, predicted values ------------------------------------------------
 options(datadist = 'dd.il6.3')
-trailb.sum.il6.3 <- summary(trailb.il6.3)
+trailb.sum.il6.3 <- summary(trailb.il6.3, nutric.il6 = nutric.il6.pct.lt)
 trailb.pred.il6.3 <- Predict(trailb.il6.3, nutric.il6 = NA)
 
 options(datadist = 'dd.noil6.3')
-trailb.sum.noil6.3 <- summary(trailb.noil6.3)
+trailb.sum.noil6.3 <- summary(trailb.noil6.3, nutric.noil6 = nutric.noil6.pct.lt)
 trailb.pred.noil6.3 <- Predict(trailb.noil6.3, nutric.noil6 = NA)
 
 options(datadist = 'dd.il6.12')
-trailb.sum.il6.12 <- summary(trailb.il6.12)
+trailb.sum.il6.12 <- summary(trailb.il6.12, nutric.il6 = nutric.il6.pct.lt)
 trailb.pred.il6.12 <- Predict(trailb.il6.12, nutric.il6 = NA)
 
 options(datadist = 'dd.noil6.12')
-trailb.sum.noil6.12 <- summary(trailb.noil6.12)
+trailb.sum.noil6.12 <- summary(trailb.noil6.12, nutric.noil6 = nutric.noil6.pct.lt)
 trailb.pred.noil6.12 <- Predict(trailb.noil6.12, nutric.noil6 = NA)
 
 trailb.nutric.plot <- create.nutric.plot('trailb')
@@ -1704,13 +1826,13 @@ trailb.nutric.table <- results.table('trailb')
 
 @
 
-We see no meaningful association between NUTRIC score at baseline and Trails B t-scores at either
-followup time.
+To examine the association between NUTRIC scores and Trails B t-scores among patients with
+long-term outcomes available, we used linear regression. We see no meaningful association between NUTRIC score at baseline and Trails B t-scores at either followup time.
 
 Figure \ref{fig:printtrailbmodels} shows the full relationships between baseline NUTRIC score and
-followup Trails B scores. Table \ref{table:trailbresults} shows p-values for the total association
-of NUTRIC score with Trails B t-score and adjusted differences in Trails B t-scores between the 75th
-and the 25th percentiles of our population's NUTRIC scores.
+followup Trails B scores for otherwise ``average" patients. Table \ref{table:trailbresults} shows
+p-values for the total association of NUTRIC score with Trails B t-score and adjusted differences in
+Trails B t-scores between the 75th and the 25th percentiles of our population's NUTRIC scores.
   
 <<printtrailbmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Executive Function (Trails B T-Scores) at 3 \\& 12 Months'>>=
 latex(trailb.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
@@ -1755,19 +1877,19 @@ pcs.noil6.12 <- fit.mult.impute(as.formula(paste('sf36.pcs.12', lt.noil6.rh, sep
 
 ## -- Calculate differences + CIs, predicted values ------------------------------------------------
 options(datadist = 'dd.il6.3')
-pcs.sum.il6.3 <- summary(pcs.il6.3)
+pcs.sum.il6.3 <- summary(pcs.il6.3, nutric.il6 = nutric.il6.pct.lt)
 pcs.pred.il6.3 <- Predict(pcs.il6.3, nutric.il6 = NA)
 
 options(datadist = 'dd.noil6.3')
-pcs.sum.noil6.3 <- summary(pcs.noil6.3)
+pcs.sum.noil6.3 <- summary(pcs.noil6.3, nutric.noil6 = nutric.noil6.pct.lt)
 pcs.pred.noil6.3 <- Predict(pcs.noil6.3, nutric.noil6 = NA)
 
 options(datadist = 'dd.il6.12')
-pcs.sum.il6.12 <- summary(pcs.il6.12)
+pcs.sum.il6.12 <- summary(pcs.il6.12, nutric.il6 = nutric.il6.pct.lt)
 pcs.pred.il6.12 <- Predict(pcs.il6.12, nutric.il6 = NA)
 
 options(datadist = 'dd.noil6.12')
-pcs.sum.noil6.12 <- summary(pcs.noil6.12)
+pcs.sum.noil6.12 <- summary(pcs.noil6.12, nutric.noil6 = nutric.noil6.pct.lt)
 pcs.pred.noil6.12 <- Predict(pcs.noil6.12, nutric.noil6 = NA)
 
 pcs.nutric.plot <- create.nutric.plot('pcs')
@@ -1775,13 +1897,15 @@ pcs.nutric.table <- results.table('pcs')
 
 @
 
-There is a meaningful and very nonlinear association between NUTRIC scores at baseline and SF-36
-PCS scores at 3 months; this relationship is not apparent at 12 months.
+To examine the association between NUTRIC scores and SF-36 physical component scores among patients
+with long-term outcomes available, we used linear regression. There is a meaningful and very
+nonlinear association between NUTRIC scores at baseline and SF-36 PCS scores at 3 months; this
+relationship is not apparent at 12 months.
 
 Figure \ref{fig:printpcsmodels} shows the full relationships between baseline NUTRIC score and
-followup SF-36 PCS scores. Table \ref{table:pcsresults} shows p-values for the total association
-of NUTRIC score with SF-36 PCS score and adjusted differences in SF-36 PCS scores between the 75th
-and the 25th percentiles of our population's NUTRIC scores.
+followup SF-36 PCS scores for otherwise ``average" patients. Table \ref{table:pcsresults} shows
+p-values for the total association of NUTRIC score with SF-36 PCS score and adjusted differences in
+SF-36 PCS scores between the 75th and the 25th percentiles of our population's NUTRIC scores.
   
 <<printpcsmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Physical Quality of Life (SF-36 PCS) at 3 \\& 12 Months'>>=
 latex(pcs.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
@@ -1826,19 +1950,19 @@ mcs.noil6.12 <- fit.mult.impute(as.formula(paste('sf36.mcs.12', lt.noil6.rh, sep
 
 ## -- Calculate differences + CIs, predicted values ------------------------------------------------
 options(datadist = 'dd.il6.3')
-mcs.sum.il6.3 <- summary(mcs.il6.3)
+mcs.sum.il6.3 <- summary(mcs.il6.3, nutric.il6 = nutric.il6.pct.lt)
 mcs.pred.il6.3 <- Predict(mcs.il6.3, nutric.il6 = NA)
 
 options(datadist = 'dd.noil6.3')
-mcs.sum.noil6.3 <- summary(mcs.noil6.3)
+mcs.sum.noil6.3 <- summary(mcs.noil6.3, nutric.noil6 = nutric.noil6.pct.lt)
 mcs.pred.noil6.3 <- Predict(mcs.noil6.3, nutric.noil6 = NA)
 
 options(datadist = 'dd.il6.12')
-mcs.sum.il6.12 <- summary(mcs.il6.12)
+mcs.sum.il6.12 <- summary(mcs.il6.12, nutric.il6 = nutric.il6.pct.lt)
 mcs.pred.il6.12 <- Predict(mcs.il6.12, nutric.il6 = NA)
 
 options(datadist = 'dd.noil6.12')
-mcs.sum.noil6.12 <- summary(mcs.noil6.12)
+mcs.sum.noil6.12 <- summary(mcs.noil6.12, nutric.noil6 = nutric.noil6.pct.lt)
 mcs.pred.noil6.12 <- Predict(mcs.noil6.12, nutric.noil6 = NA)
 
 mcs.nutric.plot <- create.nutric.plot('mcs')
@@ -1846,13 +1970,15 @@ mcs.nutric.table <- results.table('mcs')
 
 @
 
-There is a significant association between higher NUTRIC scores at baseline and higher SF-36
-MCS scores at both 3 and 12 months after hospital discharge.
+To examine the association between NUTRIC scores and SF-36 mental component scores among patients
+with long-term outcomes available, we used linear regression. There is a significant association
+between higher NUTRIC scores at baseline and higher SF-36 MCS scores at both 3 and 12 months after
+hospital discharge.
 
 Figure \ref{fig:printmcsmodels} shows the full relationships between baseline NUTRIC score and
-followup SF-36 MCS scores. Table \ref{table:mcsresults} shows p-values for the total association
-of NUTRIC score with SF-36 MCS score and adjusted differences in SF-36 MCS scores between the 75th
-and the 25th percentiles of our population's NUTRIC scores.
+followup SF-36 MCS scores for otherwise ``average" patients. Table \ref{table:mcsresults} shows
+p-values for the total association of NUTRIC score with SF-36 MCS score and adjusted differences in
+SF-36 MCS scores between the 75th and the 25th percentiles of our population's NUTRIC scores.
   
 <<printmcsmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Mental Quality of Life (SF-36 MCS) at 3 \\& 12 Months'>>=
 latex(mcs.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
