@@ -100,17 +100,17 @@ brain.oneobs$no.days.mental <- brain.oneobs$id %in% no.mental.pts
 baseline.covar <- c('edu', 'frailty', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e')
 brain.oneobs$miss.base.covar <- rowSums(is.na(brain.oneobs[,baseline.covar])) > 0
 
-## Cohort for in-hospital mortality = >=1 day with mental status + no missing baseline covariates
-brain.oneobs$cohort.inhosp <-
+## Cohort for all mortality models = >=1 day with mental status + no missing baseline covariates
+brain.oneobs$cohort.mort <-
   with(brain.oneobs, cohort.allpts & !(no.days.mental | miss.base.covar))
-n.inhosp <- sum(brain.oneobs$cohort.inhosp)
+n.mort <- sum(brain.oneobs$cohort.mort)
 
 ## All patients with usable data and a full NUTRIC score at baseline
 brain.oneobs$cohort.allpts.il6 <- with(brain.oneobs, cohort.allpts & !is.na(nutric.il6))
-brain.oneobs$cohort.inhosp.il6 <- with(brain.oneobs, cohort.inhosp & !is.na(nutric.il6))
+brain.oneobs$cohort.mort.il6 <- with(brain.oneobs, cohort.mort & !is.na(nutric.il6))
 
 n.allpts.il6 <- sum(brain.oneobs$cohort.allpts.il6)
-n.inhosp.il6 <- sum(brain.oneobs$cohort.inhosp.il6)
+n.mort.il6 <- sum(brain.oneobs$cohort.mort.il6)
 
 ## All hospital survivors who remained in study
 brain.oneobs$cohort.survivors <- with(brain.oneobs, {
@@ -177,20 +177,32 @@ brain.oneobs$dc.home <- with(brain.oneobs, factor(ifelse(is.na(hospdis.loc), NA,
 
 ## -- Create a table of the number of patients in each cohort --------------------------------------
 cohort.ns <- data.frame(cohort = c('Enrolled patients',
-                                   'In-hospital mortality',
-                                   'Discharge location and long-term mortality',
-                                   'Long-term cognitive, disability, HRQOL',
+                                   'Mortality outcomes',
+                                   'Discharge location',
+                                   'Long-term outcomes',
                                    '~~~3 months',
                                    '~~~12 months'),
-                        n.il6 = c(n.allpts.il6, n.inhosp.il6, n.survivors.il6,
+                        cohort.desc = c('',
+                                        'Patients with >=1 day complete data',
+                                        'Hospital survivors',
+                                        'Patients with at least partial outcomes',
+                                        '~~~At least partial outcomes at 3m',
+                                        '~~~At least partial outcomes at 12m'),
+                        analysis.type = c('', 'CC', 'MI', 'MI', '', ''),
+                        n.il6 = c(n.allpts.il6, n.mort.il6, n.survivors.il6,
                                   n.lt.il6, n.3m.il6, n.12m.il6),
-                        n.noil6 = c(n.allpts, n.inhosp, n.survivors, n.lt, n.3m, n.12m))
+                        n.noil6 = c(n.allpts, n.mort, n.survivors, n.lt, n.3m, n.12m))
 
 @
 
 There were \Sexpr{n.allpts} patients enrolled in the BRAIN-ICU cohort with in-hospital data. Table \ref{table:ncohort} describes the number of patients included in each analysis. We will not impute
 missing NUTRIC scores due to the involvement of IL-6; therefore different numbers of patients will
-be included in models using the full vs. the modified NUTRIC score. Patients are included in long-term cognitive, disability, and HRQOL analyses if they have at least partial outcomes data at that time point (ie, at least one of MMSE, Trailmaking A or B, any RBANS domain, FAQ, ADL, and/or SF-36 PCS or MCS).
+be included in models using the full vs. the modified NUTRIC score.
+
+We do not use multiple imputation in mortality analyses due to the complexity of combining multiple imputation with time-varying Cox models and the low amount of missingness; therefore, patients are
+included in all mortality models only if they have at least one day of complete ICU data. For all other outcomes, we use multiple imputation to handle missing data other than NUTRIC scores (further
+described in Section \ref{section:missingness}). Therefore, all patients who survived their hospital
+stay are included in discharge location models, and patients are included in long-term cognitive, disability, and HRQOL analyses if they have at least partial outcomes data at that time point (ie, at least one of MMSE, Trailmaking A or B, any RBANS domain, FAQ, ADL, and/or SF-36 PCS or MCS).
 
 <<printncohort, results = 'asis'>>=
 latex(cohort.ns, file = '',
@@ -199,8 +211,9 @@ latex(cohort.ns, file = '',
       caption.lot = 'Number of Patients in Each Analysis Cohort',
       label = 'table:ncohort',
       rowname = NULL,
-      colheads = c('Cohort', 'Using Full NUTRIC', 'Using Modified NUTRIC'),
-      col.just = c('l', 'c', 'c'))
+      colheads = c('Outcome', 'Cohort', 'Type*', 'Using Full NUTRIC', 'Using Modified NUTRIC'),
+      col.just = c('l', 'l', 'c', 'c', 'c'),
+      insert.bottom = '\\emph{\\small{*CC = complete case analysis; MI = multiple imputation}}')
 
 @
 
@@ -208,19 +221,14 @@ Tables \ref{table:descinhosp} and \ref{table:desclt} describe baseline, in-hospi
 characteristics of all three modified-NUTRIC cohorts (patients included in full-NUTRIC analyses are
 a subset of this group).
 
-Figure \ref{fig:nutricplot} compares full and modified NUTRIC scores (ie, with and without IL-6) by
-cohort among patients who have both available (ie, have at least one IL-6 measurement before study
-day 5). For the vast majority of patients, these two versions of the NUTRIC are equivalent; in our
-cohort, including IL-6 doesn't seem to make very much difference.
-
 <<desctables>>=
 desc.vars <- c('age.enroll', 'sex.pp', 'race.pp', 'edu', 'charlson.score', 'num.comorbid',
                'iqcode.score.e', 'stroke.risk', 'adl.e', 'faq.e', 'frailty', 'icu.type',
                'num.apache', 'sofa', 'nutric.il6', 'nutric.atrisk.il6', 'nutric.noil6',
                'nutric.atrisk.noil6', 'mean.benz.icu', 'mean.op.new.icu', 'mean.prop.icu',
                'mean.dex.icu', 'ever.vent.s', 'vent.los.tot.eo', 'ever.del.s.imp',
-               'del.s.imp.eo', 'ever.coma.s.imp', 'coma.s.imp.eo', 'died.inhosp', 'hospdis.loc',
-               'died.brain.90', 'died.brain.365')
+               'del.s.imp.eo', 'ever.coma.s.imp', 'coma.s.imp.eo', 'icu.los.tot.s', 'hosp.los.s',
+               'died.inhosp', 'hospdis.loc', 'died.brain.90', 'died.brain.365')
 lt.vars <- c('rbans.global.3', 'rbans.global.12', 'trail.b.3', 'trail.b.12', 'adl.3', 'adl.12',
              'faq.3', 'faq.12', 'sf36.pcs.3', 'sf36.pcs.12', 'sf36.mcs.3', 'sf36.mcs.12')
 
@@ -316,30 +324,22 @@ latex(summaryM(formula(paste(paste(desc.vars, collapse = ' + '), '~ cohort')),
       size = 'footnotesize',
       prmsd = TRUE)
 
-latex(summaryM(formula(paste(paste(lt.vars, collapse = ' + '), '~ 1')),
-               data = subset(desc.data.all, cohort == 'Long-Term Outcomes')),
-      file = '',
-      digits = 2,
-      where = '!h',
-      caption = 'Long-Term Outcomes', caption.lot = 'Long-Term Outcomes',
-      label = 'table:desclt',
-      prn = TRUE,
-      what = '%',
-      npct = 'both',
-      exclude1 = FALSE,
-      colheads = c('N', 'Patients with Long-Term Outcomes'),
-      prmsd = TRUE)
-
 @
 
-<<nutricplot, results = 'asis', fig.cap='Full vs Modified NUTRIC Scores by Cohort', fig.width=7.5, fig.height=3.75>>=
+\clearpage
+Figure \ref{fig:nutricplot} compares full and modified NUTRIC scores (ie, with and without IL-6) by
+cohort among patients who have both available (ie, have at least one IL-6 measurement before study
+day 5). For the vast majority of patients, these two versions of the NUTRIC are equivalent; in our
+cohort, including IL-6 doesn't seem to make very much difference.
+
+<<nutricplot, results = 'asis', fig.cap='Full vs Modified NUTRIC Scores by Cohort', fig.width=7.5, fig.height=3.25>>=
 nutric.scatter
 
 @
 
-\clearpage
-Figures \ref{fig:km365all} and \ref{fig:km365survivors} show Kaplan-Meier curves representing mortality over the year following enrollment for all patients and for hospital
-survivors only, respectively. \textbf{Please interpret these with caution}; because very few
+% \clearpage
+Figure \ref{fig:km365all} shows a Kaplan-Meier curve representing mortality over the year following
+enrollment for all enrolled patients. \textbf{Please interpret these with caution}; because very few
 patients had NUTRIC scores of 9 or 10 at admission, drops in these KM curves look more dramatic
 than in others.
 
@@ -349,10 +349,6 @@ than in others.
 allmort.Surv <-
   with(brain.oneobs, Surv(time = days.deathlast.365, event = as.numeric(died.brain.365)))
 allmort.bynutric <- survfit(allmort.Surv ~ nutric.il6, data = brain.oneobs)
-
-ltmort.Surv <- with(subset(brain.oneobs, cohort.lt), {
-  Surv(time = days.deathlast.365, event = as.numeric(died.brain.365)) })
-ltmort.bynutric <- survfit(ltmort.Surv ~ nutric.il6, data = subset(brain.oneobs, cohort.lt))
 
 ## Create monochromatic color scheme based on Nate's preferred navy (#003D79, colorhexa.com)
 # ## Highest NUTRIC = lightest blue
@@ -374,20 +370,24 @@ ggsurv(allmort.bynutric, cens.col = '#BA6E00', cens.shape = NA) +
   scale_x_continuous(name = 'Days Since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
   scale_y_continuous('Probability Alive') +
   guides(linetype = FALSE) +
-  ggtitle('All BRAIN Patients') +
   theme_bw()
 
 @
 
-<<km365survivors, results='asis', fig.cap='Kaplan-Meier Curve, Mortality among Hospital Survivors up to 365 Days after Enrollment', fig.height = 4>>=
-## Patients who survived hospital stay
-ggsurv(ltmort.bynutric, cens.col = '#BA6E00', cens.shape = NA) +
-  scale_colour_manual(name = 'NUTRIC,\nICU Admission', values = nutric.colors) +
-  scale_x_continuous(name = 'Days Since Enrollment', breaks = c(0, 30, 90, 180, 365)) +
-  scale_y_continuous('Probability Alive') +
-  guides(linetype = FALSE) +
-  ggtitle('BRAIN Hospital Survivors') +
-  theme_bw()
+<<printdescstatslt, results = 'asis'>>=
+latex(summaryM(formula(paste(paste(lt.vars, collapse = ' + '), '~ 1')),
+               data = subset(desc.data.all, cohort == 'Long-Term Outcomes')),
+      file = '',
+      digits = 2,
+      where = '!h',
+      caption = 'Long-Term Outcomes', caption.lot = 'Long-Term Outcomes',
+      label = 'table:desclt',
+      prn = TRUE,
+      what = '%',
+      npct = 'both',
+      exclude1 = FALSE,
+      colheads = c('N', 'Patients with Long-Term Outcomes'),
+      prmsd = TRUE)
 
 @
 
@@ -402,7 +402,7 @@ at that time point are included in the cohort; we use multiple imputation (speci
 mean matching) to impute both missing covariates and missing outcomes for all of these patients. Due
 to the complexity of imputing both baseline and time-varying covariates in time-varying Cox models,
 and the low proportion of missingness
-(\Sexpr{round((sum(!(brain.oneobs$cohort.inhosp)) / nrow(brain.oneobs))*100)}\% of patients total)
+(\Sexpr{round((sum(!(brain.oneobs$cohort.mort)) / nrow(brain.oneobs))*100)}\% of patients total)
 and therefore low likelihood of bias, only patients with complete data are included in in-hospital
 mortality models. Details of missing data are reported for each model in section \ref{section:missingness}.
 
@@ -457,8 +457,8 @@ brain.daily <- as.data.frame(brain.daily)
 death.inhosp.vars.tv <- c('daily.sofa.mod.locf', 'sevsepsis.imp', 'mental.stat.imp', 'on.vent.l24')
 
 death.inhosp.orgdata <- brain.daily[,c('id', 'study.day', death.inhosp.vars.tv)] %>%
-  left_join(dplyr::select(brain.oneobs, id, cohort.inhosp), by = 'id') %>%
-  filter(cohort.inhosp)
+  left_join(dplyr::select(brain.oneobs, id, cohort.mort), by = 'id') %>%
+  filter(cohort.mort)
 
 death.inhosp.data <- timevarying.data(org.data = death.inhosp.orgdata,
                                       time.var = 'days.deathlast.inhosp.s',
@@ -475,7 +475,7 @@ death.inhosp.noil6.data <- left_join(death.inhosp.data,
   filter(complete.cases(.))
 
 death.inhosp.il6.data <-
-  left_join(subset(death.inhosp.data, id %in% subset(brain.oneobs, cohort.inhosp.il6)$id),
+  left_join(subset(death.inhosp.data, id %in% subset(brain.oneobs, cohort.mort.il6)$id),
             brain.oneobs[,c('id', death.inhosp.vars.base, 'nutric.il6')],
             by = 'id') %>%
   filter(complete.cases(.))
@@ -1182,7 +1182,7 @@ dd.noil6.12 <- datadist(subset(brain.oneobs, cohort.12m)[,ddvars], n.unique = 11
 
 ## Which NUTRIC value should be used as reference for HR plots?
 ## Use floor() to make sure it's an integer
-nutric.ref <- floor(median(subset(brain.oneobs, cohort.inhosp.il6)$nutric.il6, na.rm = TRUE))
+nutric.ref <- floor(median(subset(brain.oneobs, cohort.mort.il6)$nutric.il6, na.rm = TRUE))
 
 ## Which NUTRIC values should be used for estimates in summary.rms()? For some reason datadist is
 ## being weird.
@@ -1190,8 +1190,8 @@ get.nutric.pcts <- function(cvar, nvar){
   quantile(brain.oneobs[brain.oneobs[,cvar], nvar], probs = c(0.25, 0.75), na.rm = TRUE)
 }
 
-nutric.il6.pct.inhosp <- get.nutric.pcts('cohort.inhosp.il6', 'nutric.il6')
-nutric.noil6.pct.inhosp <- get.nutric.pcts('cohort.inhosp', 'nutric.noil6')
+nutric.il6.pct.inhosp <- get.nutric.pcts('cohort.mort.il6', 'nutric.il6')
+nutric.noil6.pct.inhosp <- get.nutric.pcts('cohort.mort', 'nutric.noil6')
 nutric.il6.pct.survivors <- get.nutric.pcts('cohort.survivors.il6', 'nutric.il6')
 nutric.noil6.pct.survivors <- get.nutric.pcts('cohort.survivors', 'nutric.noil6')
 nutric.il6.pct.lt <- get.nutric.pcts('cohort.lt.il6', 'nutric.il6')
@@ -1211,7 +1211,7 @@ missing.inhosp.ns <-
            unlist(lapply(baseline.covar, FUN = function(v){
              sum(is.na(subset(brain.oneobs, cohort.allpts & !no.days.mental)[,v]))
            })),
-           sum(brain.oneobs$cohort.inhosp),
+           sum(brain.oneobs$cohort.mort),
            nrow(subset(brain.oneobs,
                        cohort.allpts & !miss.base.covar & !no.days.mental & is.na(nutric.il6))),
            nrow(subset(brain.oneobs,
@@ -1363,7 +1363,7 @@ inhospmort.nutric.plot
 @
 
 <<printinhospexplore, results = 'asis', fig.cap = 'Unadjusted Time to In-Hospital Death or Discharge by Modified NUTRIC', fig.height = 2.7>>=
-ggplot(data = subset(brain.oneobs, cohort.inhosp.il6),
+ggplot(data = subset(brain.oneobs, cohort.mort.il6),
        aes(x = nutric.il6, y = days.deathlast.inhosp.s)) +
   geom_boxplot(aes(group = nutric.il6), colour = 'grey50', outlier.shape = NA, fill = NA) +
   geom_point(aes(colour = died.inhosp.s), position = position_jitter(width = 0.5), alpha = 0.5, size = 0.75) +
