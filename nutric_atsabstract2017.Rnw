@@ -396,22 +396,27 @@ latex(summaryM(formula(paste(paste(lt.vars, collapse = ' + '), '~ 1')),
 All analyses are done using multivariable regression; specific types of regression are noted for
 each outcome. All hypothesis testing is done using the \Sexpr{use.method} method.
 
-To avoid bias as much as possible, models for all long-term mortality, cognitive, disability and
-HRQOL outcomes are done using multiple imputation. All patients with at least partial outcomes data
-at that time point are included in the cohort; we use multiple imputation (specifically, predictive
-mean matching) to impute both missing covariates and missing outcomes for all of these patients. Due
-to the complexity of imputing both baseline and time-varying covariates in time-varying Cox models,
-and the low proportion of missingness
-(\Sexpr{round((sum(!(brain.oneobs$cohort.mort)) / nrow(brain.oneobs))*100)}\% of patients total)
-and therefore low likelihood of bias, only patients with complete data are included in in-hospital
-mortality models. Details of missing data are reported for each model in section \ref{section:missingness}.
+To avoid bias as much as possible, models for discharge location and all long-term cognitive,
+disability and HRQOL outcomes are done using multiple imputation, although full NUTRIC scores are
+not imputed due to the involvement of IL-6. All hospital survivors with NUTRIC scores are included
+in discharge location models; all patients with NUTRIC scores and at least partial outcomes data at
+that time point are included in long-term outcomes models. We use multiple imputation (specifically,
+predictive mean matching) to impute both missing covariates and missing outcomes for all of these
+patients (again, with the exception of NUTRIC scores).
 
-All models include the following covariates, with changes as noted for in-hospital mortality; due to
-the potential for immortal time bias with this outcome, we will use time-varying Cox models which
-incorporate daily variables rather than summary variables. Most continuous covariates (noted below)
-were allowed to have a nonlinear relationship with the outcomes using restricted cubic splines;
-other continuous covariates were forced to have a linear relationship, due both to limited sample
-size and to lack of variability in those covariates (eg, over 75\% of baseline ADL values were 0).
+Due to the complexity of imputing both baseline and time-varying covariates in time-varying Cox
+models, and the low proportion of missingness (\Sexpr{round((sum(!(brain.oneobs$cohort.mort)) / nrow(brain.oneobs))*100)}\% of patients total) and therefore low likelihood of bias, only patients with
+at least one day of complete ICU data are included in in-hospital mortality models. Based on 
+clinical knowledge, we used LOCF imputation methods for both daily modified SOFA scores and severe
+sepsis, using ICU admission values if daily values were unavailable on day 1; mechanical ventilation status was determined based on all intubation/extubation times available in the medical record. Therefore, the only variable which would cause an ICU day to have missing data was mental status:
+We imputed this variable using single imputation based on the day before and the day after the missing day, but did not feel that clinically we could impute values further apart than this. Details of missing data are reported for each model in section \ref{section:missingness}.
+
+All models include the following covariates, with changes as noted for mortality outcomes; due to
+the potential for immortal time bias, we will use time-varying Cox models which incorporate daily
+variables rather than summary variables. Most continuous covariates (noted below) were allowed to
+have a nonlinear relationship with the outcomes using restricted cubic splines; other continuous
+covariates were forced to have a linear relationship, due both to limited sample size and to lack of
+variability in those covariates (eg, over 75\% of baseline ADL values were 0).
 
 \begin{itemize}
 \item Baseline characteristics
@@ -426,11 +431,11 @@ size and to lack of variability in those covariates (eg, over 75\% of baseline A
   \end{itemize}
 \item In-hospital characteristics
   \begin{itemize}
-  \item Mean modified daily SOFA in ICU (nonlinear) (\emph{in-hospital death: daily modified SOFA})
-  \item Duration of severe sepsis (nonlinear) (\emph{in-hospital death: daily severe sepsis})
-  \item Duration of delirium (nonlinear) (\emph{in-hospital death: daily mental status})
-  \item Duration of coma (nonlinear) (\emph{in-hospital death: daily mental status})
-  \item Duration of mechanical ventilation (nonlinear) (\emph{in-hospital death: daily MV})
+  \item Mean modified daily SOFA in ICU (nonlinear) (\emph{mortality: daily modified SOFA})
+  \item Duration of severe sepsis (nonlinear) (\emph{mortality: daily severe sepsis})
+  \item Duration of delirium (nonlinear) (\emph{mortality: daily mental status})
+  \item Duration of coma (nonlinear) (\emph{mortality: daily mental status})
+  \item Duration of mechanical ventilation (nonlinear) (\emph{mortality: daily MV})
   \end{itemize}
 \end{itemize}
 
@@ -1201,10 +1206,10 @@ nutric.noil6.pct.lt <- get.nutric.pcts('cohort.lt', 'nutric.noil6')
 
 \clearpage
 \subsection{Missingness for Each Cohort} \label{section:missingness}
-Table \ref{table:inhospmissing} presents details on patients excluded from the complete case analyses used for in-hospital mortality.
+Table \ref{table:mortmissing} presents details on patients excluded from the complete case analyses used for all mortality models.
 
-<<missinginhosp>>=
-missing.inhosp.ns <-
+<<missingmort>>=
+missing.mort.ns <-
   matrix(c(n.allpts,
            nrow(subset(brain.oneobs, cohort.allpts & no.days.mental)),
            nrow(subset(brain.oneobs, cohort.allpts & miss.base.covar)),
@@ -1221,25 +1226,25 @@ missing.inhosp.ns <-
            nrow(subset(brain.oneobs,
                        cohort.allpts & !miss.base.covar & !no.days.mental & !is.na(nutric.noil6)))),
          ncol = 1)
-rownames(missing.inhosp.ns) <- c('Enrolled in BRAIN',
-                                 'No days with complete ICU data',
-                                 'Missing baseline covariates',
-                                 paste0('~~~', baseline.covar),
-                                 'Eligible for inclusion based on covariates',
-                                 'Missing NUTRIC with IL-6',
-                                 'Included in model with full NUTRIC',
-                                 'Missing NUTRIC without IL-6',
-                                 'Included in model with modified NUTRIC')
-         
+rownames(missing.mort.ns) <- c('Enrolled in BRAIN',
+                               'No days with complete ICU data',
+                               'Missing baseline covariates',
+                               paste0('~~~', baseline.covar),
+                               'Eligible for inclusion based on covariates',
+                               'Missing NUTRIC with IL-6',
+                               'Included in models with full NUTRIC',
+                               'Missing NUTRIC without IL-6',
+                               'Included in models with modified NUTRIC')
+
 @
 
-<<printinhospmissing, results = 'asis'>>=
-latex(missing.inhosp.ns, file = '',
+<<printmortmissing, results = 'asis'>>=
+latex(missing.mort.ns, file = '',
       title = '',
       where = '!h',
-      caption = 'Missing Data for In-Hospital Mortality Models',
-      caption.lot = 'Missing Data for In-Hospital Mortality Models',
-      label = 'table:inhospmissing',
+      caption = 'Missing Data for Mortality Models',
+      caption.lot = 'Missing Data for Mortality Models',
+      label = 'table:mortmissing',
       rgroup = c('', 'Covariates', 'Main Exposure'),
       n.rgroup = c(1, 10, 4),
       colheads = 'N')
@@ -1247,7 +1252,7 @@ latex(missing.inhosp.ns, file = '',
 @
 
 Tables \ref{table:survmissing} and \ref{table:ltmissing} show missing covariates and outcomes for,
-respectively, hospital survivors (used for discharge location and long-term mortality models) and
+respectively, hospital survivors (used for discharge location models) and
 long-term cognitive, disability and HRQOL cohorts; for these models, this missing data will be
 imputed.
 
@@ -1255,8 +1260,8 @@ imputed.
 latex(missing.survivors.df[,2:3], file = '',
       title = '',
       where = '!h',
-      caption = 'Missing Data for Discharge Location and Long-Term Mortality Models',
-      caption.lot = 'Missing Data for Discharge, Long-Term Mortality Models',
+      caption = 'Missing Data for Discharge Location Models',
+      caption.lot = 'Missing Data for Discharge Models',
       label = 'table:survmissing',
       rgroup = c('', 'Covariates', 'Outcomes'),
       n.rgroup = c(1, 13, 1),
