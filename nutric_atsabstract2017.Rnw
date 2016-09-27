@@ -458,35 +458,8 @@ brain.daily <- brain.daily %>%
   ungroup()
 brain.daily <- as.data.frame(brain.daily)
 
-## Create time-varying data sets
-death.inhosp.vars.tv <- c('daily.sofa.mod.locf', 'sevsepsis.imp', 'mental.stat.imp', 'on.vent.l24')
-
-death.inhosp.orgdata <- brain.daily[,c('id', 'study.day', death.inhosp.vars.tv)] %>%
-  left_join(dplyr::select(brain.oneobs, id, cohort.mort), by = 'id') %>%
-  filter(cohort.mort)
-
-death.inhosp.data <- timevarying.data(org.data = death.inhosp.orgdata,
-                                      time.var = 'days.deathlast.inhosp.s',
-                                      event.var = 'died.inhosp.s',
-                                      event.string = 'Died in hospital during study period',
-                                      data.set = brain.oneobs)
-
-death.inhosp.vars.base <-
-  c('edu', 'frailty.num', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e')
-
-death.inhosp.noil6.data <- left_join(death.inhosp.data,
-                                     brain.oneobs[,c('id', death.inhosp.vars.base, 'nutric.noil6')],
-                                     by = 'id') %>%
-  filter(complete.cases(.))
-
-death.inhosp.il6.data <-
-  left_join(subset(death.inhosp.data, id %in% subset(brain.oneobs, cohort.mort.il6)$id),
-            brain.oneobs[,c('id', death.inhosp.vars.base, 'nutric.il6')],
-            by = 'id') %>%
-  filter(complete.cases(.))
-
-## -- Long-term mortality and discharge location (hospital survivor cohorts) -----------------------
-## List of model covariates for long-term outcomes
+## -- Discharge location (hospital survivor cohorts) -----------------------------------------------
+## List of model covariates for discharge location and long-term outcomes
 lt.covars <- c('edu', 'frailty.num', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e',
                'mean.modsofa.icu', 'icudays.sevseptic.s', 'del.s.imp', 'coma.s.imp',
                'vent.los.tot.s')
@@ -1025,9 +998,38 @@ nb.results.data <- function(outcome = c('adl', 'faq')){
 }
 
 ## -- rms models, exponentiating point estimates for mort, disloc outcomes -------------------------
-rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome',
-                                         'inhospmort')){
-  if(outcome %in% c('dchome', 'inhospmort')){
+rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'mort', 'dchome')){
+  if(outcome == 'mort'){
+    mod.inhosp.il6 <- get(paste0(outcome, '.inhosp.il6'))
+    mod.inhosp.noil6 <- get(paste0(outcome, '.inhosp.noil6'))
+    sum.inhosp.il6 <- get(paste0(outcome, '.inhosp.sum.il6'))
+    sum.inhosp.noil6 <- get(paste0(outcome, '.inhosp.sum.noil6'))
+    
+    mod.90.il6 <- get(paste0(outcome, '.90.il6'))
+    mod.90.noil6 <- get(paste0(outcome, '.90.noil6'))
+    sum.90.il6 <- get(paste0(outcome, '.90.sum.il6'))
+    sum.90.noil6 <- get(paste0(outcome, '.90.sum.noil6'))
+    
+    mod.365.il6 <- get(paste0(outcome, '.365.il6'))
+    mod.365.noil6 <- get(paste0(outcome, '.365.noil6'))
+    sum.365.il6 <- get(paste0(outcome, '.365.sum.il6'))
+    sum.365.noil6 <- get(paste0(outcome, '.365.sum.noil6'))
+    
+    diffci.inhosp.il6 <- sum.inhosp.il6[grep('^nutric', rownames(sum.inhosp.il6)),]
+    diffci.inhosp.noil6 <- sum.inhosp.noil6[grep('^nutric', rownames(sum.inhosp.noil6)),]
+    diffci.90.il6 <- sum.90.il6[grep('^nutric', rownames(sum.90.il6)),]
+    diffci.90.noil6 <- sum.90.noil6[grep('^nutric', rownames(sum.90.noil6)),]
+    diffci.365.il6 <- sum.365.il6[grep('^nutric', rownames(sum.365.il6)),]
+    diffci.365.noil6 <- sum.365.noil6[grep('^nutric', rownames(sum.365.noil6)),]
+
+    diffci.list <- list(diffci.inhosp.il6, diffci.inhosp.noil6,
+                        diffci.90.il6, diffci.90.noil6,
+                        diffci.365.il6, diffci.365.noil6)
+    mod.list <- list(mod.inhosp.il6, mod.inhosp.noil6,
+                     mod.90.il6, mod.90.noil6,
+                     mod.365.il6, mod.365.noil6)
+    
+  } else if(outcome %in% c('dchome')){
     mod.il6 <- get(paste0(outcome, '.il6'))
     mod.noil6 <- get(paste0(outcome, '.noil6'))
     
@@ -1061,7 +1063,7 @@ rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmor
     
   }
   
-  if(outcome %in% c('ltmort', 'dchome', 'inhospmort')){
+  if(outcome %in% c('mort', 'dchome')){
     exp.cols <- c(4, 6, 7)
     diffci.list <- lapply(diffci.list, FUN = function(x){
       x[exp.cols] <- exp(x[exp.cols])
@@ -1079,16 +1081,16 @@ rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmor
   names(diffcip.data) <- c('ref.val', 'comp.val', 'diff', 'pointest', 'se', 'lcl', 'ucl',
                            'type', 'pval')
 
-  if(outcome %in% c('inhospmort', 'dchome')){
-    if(outcome == 'dchome'){
-      tlevel <- 1
-      tlabel <- 'Discharge'
-    } else{
-      tlevel <- 0
-      tlabel <- 'In-Hospital'
-    }
-    diffcip.data$time.f <- factor(rep(tlevel, 2), levels = tlevel, labels = tlabel)
+  if(outcome == 'dchome'){
+    diffcip.data$time.f <- factor(rep(1, 2), levels = 1, labels = 'Discharge')
     diffcip.data$version.f <- factor(c(1, 2), levels = 1:2, labels = c('With IL-6', 'Without IL-6'))
+  } else if(outcome == 'mort'){
+    diffcip.data$time.f <- factor(c(1, 1, 2, 2, 3, 3),
+                                  levels = 1:3,
+                                  labels = c('In-Hospital', '90 Days', '365 Days'))
+    diffcip.data$version.f <- factor(c(1, 2, 1, 2, 1, 2),
+                                     levels = 1:2,
+                                     labels = c('With IL-6', 'Without IL-6'))
   } else{
     diffcip.data$time.f <- factor(c(2, 2, 3, 3), levels = 2:3, labels = c('3 Months', '12 Months'))
     diffcip.data$version.f <-
@@ -1107,8 +1109,7 @@ rms.results.data <- function(outcome = c('rbans', 'trailb', 'pcs', 'mcs', 'ltmor
 
 ## -- Step 7: Create data set of results from [model type].results.data() formatted for table ------
 results.table <-
-  function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'pcs', 'mcs', 'ltmort', 'dchome',
-                       'inhospmort')){
+  function(outcome = c('adl', 'faq', 'rbans', 'trailb', 'pcs', 'mcs', 'mort', 'dchome')){
     if(outcome %in% c('adl', 'faq')){
       results.data <- nb.results.data(outcome)
     } else{
@@ -1195,8 +1196,8 @@ get.nutric.pcts <- function(cvar, nvar){
   quantile(brain.oneobs[brain.oneobs[,cvar], nvar], probs = c(0.25, 0.75), na.rm = TRUE)
 }
 
-nutric.il6.pct.inhosp <- get.nutric.pcts('cohort.mort.il6', 'nutric.il6')
-nutric.noil6.pct.inhosp <- get.nutric.pcts('cohort.mort', 'nutric.noil6')
+nutric.il6.pct.mort <- get.nutric.pcts('cohort.mort.il6', 'nutric.il6')
+nutric.noil6.pct.mort <- get.nutric.pcts('cohort.mort', 'nutric.noil6')
 nutric.il6.pct.survivors <- get.nutric.pcts('cohort.survivors.il6', 'nutric.il6')
 nutric.noil6.pct.survivors <- get.nutric.pcts('cohort.survivors', 'nutric.noil6')
 nutric.il6.pct.lt <- get.nutric.pcts('cohort.lt.il6', 'nutric.il6')
@@ -1284,56 +1285,172 @@ latex(missing.lt.df[,2:5], file = '',
 @
 
 \clearpage
-\section{NUTRIC vs In-Hospital Mortality}
-Results follow for the associations between NUTRIC scores and in-hospital mortality during the 30-day BRAIN study period. Both models are Cox proportional hazards models using time-dependent covariates for daily modified SOFA, severe sepsis, mental status, and ventilator status. Only patients (and patient-days) with complete data are included in this complete case analysis; please see Section \ref{section:missingness} for details on missingness in this cohort.
+\section{NUTRIC vs Mortality}
+For all mortality models, we used Cox proportional hazards models with time-dependent covariates,
+using complete case data only. Please see Section \ref{section:missingness} for details on patients
+included and excluded from these models.
 
-<<inhospmortmodels>>=
-## -- Model setup ----------------------------------------------------------------------------------
-Surv.il6.inhosp <- with(death.inhosp.il6.data, {
-  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
-Surv.noil6.inhosp <- with(death.inhosp.noil6.data, {
-  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
+<<mortmodelsetup>>=
+## Set model formulas for use in all models
+mort.covar.rh <- 'rcs(edu, 3) + frailty.num + sex.pp + rcs(bmi, 3) + iqcode.score.e + adl.e + rcs(faq.e, 3) + rcs(daily.sofa.mod.locf, 3) + sevsepsis.imp + mental.stat.imp + on.vent.l24'
 
-inhospmort.covar.rh <- 'rcs(edu, 3) + frailty.num + sex.pp + rcs(bmi, 3) + iqcode.score.e + adl.e + rcs(faq.e, 3) + rcs(daily.sofa.mod.locf, 3) + sevsepsis.imp + mental.stat.imp + on.vent.l24'
+mort.il6.rh <- paste(mort.covar.rh, '+ rcs(nutric.il6, 3)')
+mort.noil6.rh <- paste(mort.covar.rh, '+ rcs(nutric.noil6, 3)')
 
-inhospmort.il6.rh <- paste(inhospmort.covar.rh, '+ rcs(nutric.il6, 3)')
-inhospmort.noil6.rh <- paste(inhospmort.covar.rh, '+ rcs(nutric.noil6, 3)')
+## -- Create time-varying data sets ----------------------------------------------------------------
+## Variables to include in time-varying data set, and merge on from baseline data
+mort.vars.tv <- c('daily.sofa.mod.locf', 'sevsepsis.imp', 'mental.stat.imp', 'on.vent.l24')
+mort.vars.base <- c('edu', 'frailty.num', 'sex.pp', 'bmi', 'iqcode.score.e', 'adl.e', 'faq.e')
+
+## Original data set to base time-varying data sets on: all daily records
+## (Data sets should only differ in stop.day values)
+mort.orgdata <- brain.daily[,c('id', 'study.day', mort.vars.tv)] %>%
+  left_join(dplyr::select(brain.oneobs, id, cohort.mort), by = 'id') %>%
+  filter(cohort.mort)
+
+## In-hospital mortality ##
+## Main time-varying data
+mort.inhosp.data <- timevarying.data(org.data = mort.orgdata,
+                                     time.var = 'days.deathlast.inhosp.s',
+                                     event.var = 'died.inhosp.s',
+                                     event.string = 'Died in hospital during study period',
+                                     data.set = brain.oneobs)
+
+## Merge on baseline covariates, separately for models with full vs modified NUTRIC
+mort.inhosp.noil6.data <- left_join(mort.inhosp.data,
+                                    brain.oneobs[,c('id', mort.vars.base, 'nutric.noil6')],
+                                    by = 'id') %>%
+  filter(complete.cases(.))
+
+mort.inhosp.il6.data <- left_join(mort.inhosp.data,
+                                  brain.oneobs[,c('id', mort.vars.base, 'nutric.il6')],
+                                  by = 'id') %>%
+  filter(complete.cases(.))
+
+## 90-day mortality ##
+## Main time-varying data
+mort.90.data <- timevarying.data(org.data = mort.orgdata,
+                                 time.var = 'days.deathlast.90',
+                                 event.var = 'died.brain.90',
+                                 event.string = 'Died during first 90 days',
+                                 data.set = brain.oneobs)
+
+## Merge on baseline covariates, separately for models with full vs modified NUTRIC
+mort.90.noil6.data <- left_join(mort.90.data,
+                                brain.oneobs[,c('id', mort.vars.base, 'nutric.noil6')],
+                                by = 'id') %>%
+  filter(complete.cases(.))
+
+mort.90.il6.data <- left_join(mort.90.data,
+                              brain.oneobs[,c('id', mort.vars.base, 'nutric.il6')],
+                              by = 'id') %>%
+  filter(complete.cases(.))
+
+## 365-day mortality ##
+## Main time-varying data
+mort.365.data <- timevarying.data(org.data = mort.orgdata,
+                                  time.var = 'days.deathlast.365',
+                                  event.var = 'died.brain.365',
+                                  event.string = 'Died during first 365 days',
+                                  data.set = brain.oneobs)
+
+## Merge on baseline covariates, separately for models with full vs modified NUTRIC
+mort.365.noil6.data <- left_join(mort.365.data,
+                                 brain.oneobs[,c('id', mort.vars.base, 'nutric.noil6')],
+                                 by = 'id') %>%
+  filter(complete.cases(.))
+
+mort.365.il6.data <- left_join(mort.365.data,
+                               brain.oneobs[,c('id', mort.vars.base, 'nutric.il6')],
+                               by = 'id') %>%
+  filter(complete.cases(.))
 
 ## Need to set datadist for summary.rms() to work, but will use NUTRIC values from main cohort;
 ## multiple records per patient would mess up percentile calculations otherwise
-dd.inhosp.il6 <- datadist(death.inhosp.il6.data)
-dd.inhosp.noil6 <- datadist(death.inhosp.noil6.data)
+dd.mort.il6 <- datadist(mort.inhosp.il6.data)
+dd.mort.noil6 <- datadist(mort.inhosp.noil6.data)
+
+@
+
+<<runmortmodels>>=
+## -- Create Surv objects --------------------------------------------------------------------------
+Surv.il6.inhosp <- with(mort.inhosp.il6.data, {
+  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
+Surv.noil6.inhosp <- with(mort.inhosp.noil6.data, {
+  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
+
+Surv.il6.90 <- with(mort.90.il6.data, {
+  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
+Surv.noil6.90 <- with(mort.90.noil6.data, {
+  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
+
+Surv.il6.365 <- with(mort.365.il6.data, {
+  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
+Surv.noil6.365 <- with(mort.365.noil6.data, {
+  Surv(time = start.day, time2 = stop.day, event = (died == 'Died at end of interval')) })
 
 ## -- Run models -----------------------------------------------------------------------------------
-inhospmort.il6 <- cph(as.formula(paste('Surv.il6.inhosp', inhospmort.il6.rh, sep = ' ~ ')),
-                      x = TRUE, y = TRUE, data = death.inhosp.il6.data)
+mort.inhosp.il6 <- cph(as.formula(paste('Surv.il6.inhosp', mort.il6.rh, sep = ' ~ ')),
+                       x = TRUE, y = TRUE, data = mort.inhosp.il6.data)
 
-inhospmort.noil6 <- cph(as.formula(paste('Surv.noil6.inhosp', inhospmort.noil6.rh, sep = ' ~ ')),
-                        x = TRUE, y = TRUE, data = death.inhosp.noil6.data)
+mort.inhosp.noil6 <- cph(as.formula(paste('Surv.noil6.inhosp', mort.noil6.rh, sep = ' ~ ')),
+                         x = TRUE, y = TRUE, data = mort.inhosp.noil6.data)
 
-## -- Calculate and plot HRs + CIs -----------------------------------------------------------------
-## HRs for 75th vs 25th percentiles
-options(datadist = 'dd.inhosp.il6')
-inhospmort.sum.il6 <- summary(inhospmort.il6, nutric.il6 = nutric.il6.pct.inhosp)
-inhospmort.hrs.il6 <- calc.nutric.hrs(inhospmort.il6, 'nutric.il6', reflevel = nutric.ref)
-inhospmort.hrs.il6$version <- 1
+mort.90.il6 <- cph(as.formula(paste('Surv.il6.90', mort.il6.rh, sep = ' ~ ')),
+                   x = TRUE, y = TRUE, data = mort.90.il6.data)
 
-options(datadist = 'dd.inhosp.noil6')
-inhospmort.sum.noil6 <- summary(inhospmort.noil6, nutric.noil6 = nutric.noil6.pct.inhosp)
-inhospmort.hrs.noil6 <- calc.nutric.hrs(inhospmort.noil6, 'nutric.noil6', reflevel = nutric.ref)
-inhospmort.hrs.noil6$version <- 2
+mort.90.noil6 <- cph(as.formula(paste('Surv.noil6.90', mort.noil6.rh, sep = ' ~ ')),
+                     x = TRUE, y = TRUE, data = mort.90.noil6.data)
 
-## Create results table
-inhospmort.nutric.table <- results.table('inhospmort')
+mort.365.il6 <- cph(as.formula(paste('Surv.il6.365', mort.il6.rh, sep = ' ~ ')),
+                    x = TRUE, y = TRUE, data = mort.365.il6.data)
 
-## Plot multiple HRs
-inhospmort.hrs.all <-
-  bind_rows(inhospmort.hrs.il6, inhospmort.hrs.noil6) %>%
-  mutate(version.f = factor(version, levels = 1:2, labels = c('With IL-6', 'Without IL-6')))
+mort.365.noil6 <- cph(as.formula(paste('Surv.noil6.365', mort.noil6.rh, sep = ' ~ ')),
+                      x = TRUE, y = TRUE, data = mort.365.noil6.data)
 
-inhospmort.nutric.plot <- ggplot(data = inhospmort.hrs.all, aes(x = xval, y = pointest)) +
+@
+
+<<mortresults>>=
+## -- Create data frame of all HRs for mortality models --------------------------------------------
+options(datadist = 'dd.mort.il6')
+mort.inhosp.hr.il6 <- calc.nutric.hrs(cphfit = mort.inhosp.il6, 'nutric.il6', nutric.ref)
+mort.90.hr.il6 <- calc.nutric.hrs(cphfit = mort.90.il6, 'nutric.il6', nutric.ref)
+mort.365.hr.il6 <- calc.nutric.hrs(cphfit = mort.365.il6, 'nutric.il6', nutric.ref)
+
+mort.inhosp.sum.il6 <- summary(mort.inhosp.il6, nutric.il6 = nutric.il6.pct.mort)
+mort.90.sum.il6 <- summary(mort.90.il6, nutric.il6 = nutric.il6.pct.mort)
+mort.365.sum.il6 <- summary(mort.365.il6, nutric.il6 = nutric.il6.pct.mort)
+
+options(datadist = 'dd.mort.noil6')
+mort.inhosp.hr.noil6 <- calc.nutric.hrs(cphfit = mort.inhosp.noil6, 'nutric.noil6', nutric.ref)
+mort.90.hr.noil6 <- calc.nutric.hrs(cphfit = mort.90.noil6, 'nutric.noil6', nutric.ref)
+mort.365.hr.noil6 <- calc.nutric.hrs(cphfit = mort.365.noil6, 'nutric.noil6', nutric.ref)
+
+mort.inhosp.sum.noil6 <- summary(mort.inhosp.noil6, nutric.noil6 = nutric.noil6.pct.mort)
+mort.90.sum.noil6 <- summary(mort.90.noil6, nutric.noil6 = nutric.noil6.pct.mort)
+mort.365.sum.noil6 <- summary(mort.365.noil6, nutric.noil6 = nutric.noil6.pct.mort)
+
+## Add time, version variables to all individual data frames of HRs
+mort.inhosp.hr.il6$time <- mort.inhosp.hr.noil6$time <- 1
+mort.90.hr.il6$time <- mort.90.hr.noil6$time <- 2
+mort.365.hr.il6$time <- mort.365.hr.noil6$time <- 3
+mort.inhosp.hr.il6$version <- mort.90.hr.il6$version <- mort.365.hr.il6$version <- 1
+mort.inhosp.hr.noil6$version <- mort.90.hr.noil6$version <- mort.365.hr.noil6$version <- 2
+
+mort.hrs <- rbind(mort.inhosp.hr.il6, mort.inhosp.hr.noil6,
+                  mort.90.hr.il6, mort.90.hr.noil6,
+                  mort.365.hr.il6, mort.365.hr.noil6)
+mort.hrs$time.f <- with(mort.hrs, factor(time,
+                                         levels = 1:3,
+                                         labels = c('In-Hospital', '90 Days', '365 Days')))
+mort.hrs$version.f <- with(mort.hrs, factor(version,
+                                            levels = 1:2,
+                                            labels = c('With IL-6', 'Without IL-6')))
+
+## -- Plot HRs for all time points, both NUTRIC versions -------------------------------------------
+mort.nutric.plot <- ggplot(data = mort.hrs, aes(x = xval, y = pointest)) +
   geom_hline(yintercept = 1, colour = 'grey90', size = 2) +
-  facet_wrap(~ version.f, nrow = 1, scales = 'free_x') +
+  facet_grid(time.f ~ version.f, scales = 'free_x') +
   geom_pointrange(aes(ymin = lcl, ymax = ucl), colour = '#003D79') +
   scale_x_continuous(name = 'NUTRIC Score at ICU Admission', breaks = 0:10) +
   scale_y_continuous(name = paste('Adjusted Hazard Ratio for Death\nReference =', nutric.ref),
@@ -1341,45 +1458,56 @@ inhospmort.nutric.plot <- ggplot(data = inhospmort.hrs.all, aes(x = xval, y = po
                      trans = 'log') +
   theme_bw()
 
+## -- Create results table -------------------------------------------------------------------------
+mort.nutric.table <- results.table('mort')
+
 @
 
-We see no meaningful association between NUTRIC score at baseline and in-hospital mortality up to 30 days.
+\subsection{NUTRIC vs Mortality}
+Results follow for the associations between NUTRIC scores and mortality at the following censoring times: in-hospital death during the 30-day BRAIN study period (death dates from hospital record);
+90-day death; and 365-day death (death dates from either staff contact or SSDI).
 
-Table \ref{table:inhospmortresults} shows p-values for the total association of NUTRIC score with
-in-hospital mortality and hazard ratios comparing the 75th to the 25th percentiles of our population's NUTRIC scores. Figure \ref{fig:printinhospmortmodels} shows hazard ratios comparing each NUTRIC value to \Sexpr{nutric.ref}, our complete case cohort's median and thus representing an ``average"
+For all three endpoints, we see an association such that the higher NUTRIC scores are more strongly
+related to a higher risk of death. These associations are marginally significant for the full NUTRIC
+scores, and less pronounced for modified NUTRIC scores. This could be due to either the influence of
+IL-6 (the difference between these two scores), or to the difference between the patients included in the two cohorts.
+
+Table \ref{table:mortresults} shows p-values for the total association of NUTRIC score with
+mortality and hazard ratios comparing the 75th to the 25th percentiles of our population's NUTRIC scores. Figure \ref{fig:printmortmodels} shows hazard ratios comparing each NUTRIC value to \Sexpr{nutric.ref}, our complete case cohort's median and thus representing an ``average"
 patient. Figure \ref{fig:printinhospexplore} shows raw (unadjusted) times to in-hospital death or discharge by full NUTRIC score at ICU admission.
   
-<<printinhospmortmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs In-Hospital Mortality up to 30 Days', fig.height = 2.9>>=
-latex(inhospmort.nutric.table[,c('comp.str.il6', 'peci.str.il6', 'pval.str.il6',
-                                 'comp.str.noil6', 'peci.str.noil6', 'pval.str.noil6')],
+<<printmortmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Mortality'>>=
+latex(mort.nutric.table,
       file = '',
       where = '!h',
-      caption = 'NUTRIC Score at ICU Admission vs In-Hospital Mortality up to 30 Days',
-      caption.lot = 'NUTRIC vs In-Hospital Mortality',
-      label = 'table:inhospmortresults',
+      caption = 'NUTRIC Score at ICU Admission vs Mortality',
+      caption.lot = 'NUTRIC vs Mortality',
+      label = 'table:mortresults',
+      size = 'small',
       rowname = NULL,
-      colheads = rep(c('NUTRIC Score Comparison', 'HR (95\\% CI)', 'P-Value'), 2),
-      col.just = rep(c('c', rep('r', 2)), 2),
-      cgroup = c('NUTRIC with IL-6', 'NUTRIC without IL-6'),
-      n.cgroup = c(3, 3))
+      colheads = c('Endpoint', rep(c('NUTRIC Comparison', 'HR (95\\% CI)', 'P-Value'), 2)),
+      col.just = c('l', rep(c('c', rep('r', 2)), 2)),
+      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
+      n.cgroup = c(1, 3, 3))
 
-inhospmort.nutric.plot
-
-@
-
-<<printinhospexplore, results = 'asis', fig.cap = 'Unadjusted Time to In-Hospital Death or Discharge by Modified NUTRIC', fig.height = 2.7>>=
-ggplot(data = subset(brain.oneobs, cohort.mort.il6),
-       aes(x = nutric.il6, y = days.deathlast.inhosp.s)) +
-  geom_boxplot(aes(group = nutric.il6), colour = 'grey50', outlier.shape = NA, fill = NA) +
-  geom_point(aes(colour = died.inhosp.s), position = position_jitter(width = 0.5), alpha = 0.5, size = 0.75) +
-  scale_x_continuous(breaks = 0:10) +
-  scale_colour_discrete(labels = c('Discharged', 'Died')) +
-  theme(#legend.position = 'bottom', legend.direction = 'horizontal',
-        legend.title = element_text(size = 6), legend.text = element_text(size = 6),
-        axis.title = element_text(size = 7),
-        axis.text = element_text(size = 7))
+mort.nutric.plot
 
 @
+
+%' <<printinhospexplore, results = 'asis', fig.cap = 'Unadjusted Time to In-Hospital Death or Discharge by Modified NUTRIC', fig.height = 2.7>>=
+%' ggplot(data = subset(brain.oneobs, cohort.mort.il6),
+%'        aes(x = nutric.il6, y = days.deathlast.inhosp.s)) +
+%'   geom_boxplot(aes(group = nutric.il6), colour = 'grey50', outlier.shape = NA, fill = NA) +
+%'   geom_point(aes(colour = died.inhosp.s),
+%'              position = position_jitter(width = 0.5), alpha = 0.5, size = 0.75) +
+%'   scale_x_continuous(breaks = 0:10) +
+%'   scale_colour_discrete(labels = c('Discharged', 'Died')) +
+%'   theme(#legend.position = 'bottom', legend.direction = 'horizontal',
+%'         legend.title = element_text(size = 6), legend.text = element_text(size = 6),
+%'         axis.title = element_text(size = 7),
+%'         axis.text = element_text(size = 7))
+%' 
+%' @
 
 \clearpage
 \section{NUTRIC vs Hospital Discharge Location}
@@ -1401,7 +1529,7 @@ dchome.sum.il6 <- summary(dchome.il6, nutric.il6 = nutric.il6.pct.survivors)
 dchome.pred.il6 <- Predict(dchome.il6, nutric.il6 = NA, fun = plogis)
 
 options(datadist = 'dd.noil6.survivors')
-dchome.sum.noil6 <- summary(dchome.noil6, nutric.noil6 = nutric.noil6.pct.inhosp)
+dchome.sum.noil6 <- summary(dchome.noil6, nutric.noil6 = nutric.noil6.pct.survivors)
 dchome.pred.noil6 <- Predict(dchome.noil6, nutric.noil6 = NA, fun = plogis)
 
 dchome.nutric.plot <- create.nutric.plot('dchome')
@@ -1436,145 +1564,6 @@ latex(dchome.nutric.table[,c('comp.str.il6', 'peci.str.il6', 'pval.str.il6',
      insert.bottom = nutric.note)
 
 dchome.nutric.plot
-
-@
-
-\clearpage
-\section{NUTRIC vs Long-Term Mortality}
-Results follow for the associations between NUTRIC scores and mortality after hospital discharge,
-among hospital survivors only. All models are Cox proportional hazards models using multiple
-imputation.
-
-<<mortmodels>>=
-## -- Create Surv objects --------------------------------------------------------------------------
-Surv.il6.3m <- with(modeldata.il6.survivors, {
-  Surv(time = days.deathlast.90, event = (died.brain.90 == 'Died during first 90 days')) })
-Surv.noil6.3m <- with(modeldata.noil6.survivors, {
-  Surv(time = days.deathlast.90, event = (died.brain.90 == 'Died during first 90 days')) })
-Surv.il6.12m <- with(modeldata.il6.survivors, {
-  Surv(time = days.deathlast.365, event = (died.brain.365 == 'Died during first 365 days')) })
-Surv.noil6.12m <- with(modeldata.noil6.survivors, {
-  Surv(time = days.deathlast.365, event = (died.brain.365 == 'Died during first 365 days')) })
-
-## -- Run models -----------------------------------------------------------------------------------
-ltmort.il6.3 <- fit.mult.impute(as.formula(paste('Surv.il6.3m', lt.il6.rh, sep = ' ~ ')),
-                                fitter = cph,
-                                x = TRUE, y = TRUE,
-                                xtrans = mice.il6.survivors,
-                                data = modeldata.il6.survivors)
-
-ltmort.noil6.3 <- fit.mult.impute(as.formula(paste('Surv.noil6.3m', lt.noil6.rh, sep = ' ~ ')),
-                                  fitter = cph,
-                                  x = TRUE, y = TRUE,
-                                  xtrans = mice.noil6.survivors,
-                                  data = modeldata.noil6.survivors)
-
-ltmort.il6.12 <- fit.mult.impute(as.formula(paste('Surv.il6.12m', lt.il6.rh, sep = ' ~ ')),
-                                 fitter = cph,
-                                 x = TRUE, y = TRUE,
-                                 xtrans = mice.il6.survivors,
-                                 data = modeldata.il6.survivors)
-
-ltmort.noil6.12 <- fit.mult.impute(as.formula(paste('Surv.noil6.12m', lt.noil6.rh, sep = ' ~ ')),
-                                   fitter = cph,
-                                   x = TRUE, y = TRUE,
-                                   xtrans = mice.noil6.survivors,
-                                   data = modeldata.noil6.survivors)
-
-## -- Calculate and plot HRs + CIs -----------------------------------------------------------------
-## Using IL-6
-options(datadist = 'dd.il6.survivors')
-
-## HRs for 75th vs 25th percentiles
-ltmort.sum.il6.3 <- summary(ltmort.il6.3, nutric.il6 = nutric.il6.pct.survivors)
-ltmort.sum.il6.12 <- summary(ltmort.il6.12, nutric.il6 = nutric.il6.pct.survivors)
-
-## HRs vs median
-ltmort.hrs.il6.3 <- calc.nutric.hrs(ltmort.il6.3, 'nutric.il6', reflevel = nutric.ref)
-ltmort.hrs.il6.3$time <- 1; ltmort.hrs.il6.3$version <- 1
-ltmort.hrs.il6.12 <- calc.nutric.hrs(ltmort.il6.12, 'nutric.il6', reflevel = nutric.ref)
-ltmort.hrs.il6.12$time <- 2; ltmort.hrs.il6.12$version <- 1
-
-## Without IL-6
-options(datadist = 'dd.noil6.survivors')
-
-## HRs for 75th vs 25th percentiles
-ltmort.sum.noil6.3 <- summary(ltmort.noil6.3, nutric.noil6 = nutric.noil6.pct.survivors)
-ltmort.sum.noil6.12 <- summary(ltmort.noil6.12, nutric.noil6 = nutric.noil6.pct.survivors)
-
-ltmort.hrs.noil6.3 <- calc.nutric.hrs(ltmort.noil6.3, 'nutric.noil6', reflevel = nutric.ref)
-ltmort.hrs.noil6.3$time <- 1; ltmort.hrs.noil6.3$version <- 2
-ltmort.hrs.noil6.12 <- calc.nutric.hrs(ltmort.noil6.12, 'nutric.noil6', reflevel = nutric.ref)
-ltmort.hrs.noil6.12$time <- 2; ltmort.hrs.noil6.12$version <- 2
-
-## Create results table and plot
-ltmort.nutric.table <- results.table('ltmort')
-
-ltmort.hrs.all <-
-  bind_rows(ltmort.hrs.il6.3, ltmort.hrs.il6.12, ltmort.hrs.noil6.3, ltmort.hrs.noil6.12) %>%
-  mutate(time.f = factor(time, levels = 1:2, labels = c('3 Months', '12 Months')),
-         version.f = factor(version, levels = 1:2, labels = c('With IL-6', 'Without IL-6')))
-
-ltmort.nutric.plot <- ggplot(data = ltmort.hrs.all, aes(x = xval, y = pointest)) +
-  geom_hline(yintercept = 1, colour = 'grey90', size = 2) +
-  facet_grid(time.f ~ version.f, scales = 'free_x') +
-  geom_pointrange(aes(ymin = lcl, ymax = ucl), colour = '#003D79') +
-  scale_x_continuous(name = 'NUTRIC Score at ICU Admission', breaks = 0:10) +
-  scale_y_continuous(name = paste('Adjusted Hazard Ratio for Death\nReference =', nutric.ref),
-                     breaks = c(0, 0.5, 1, 2, 4, 8),
-                     trans = 'log') +
-  theme_bw()
-
-# ## Test with survest()
-# survest.df <- data.frame(nutric.noil6 = 0:9,
-#                          edu = rep(dd.noil6.3$limits$edu[2], 10),
-#                          frailty.num = rep(dd.noil6.3$limits$frailty.num[2], 10),
-#                          sex.pp = rep(dd.noil6.3$limits$sex.pp[2], 10),
-#                          bmi = rep(dd.noil6.3$limits$bmi[2], 10),
-#                          iqcode.score.e = rep(dd.noil6.3$limits$iqcode.score.e[2], 10),
-#                          adl.e = rep(dd.noil6.3$limits$adl.e[2], 10),
-#                          faq.e = rep(dd.noil6.3$limits$faq.e[2], 10),
-#                          mean.modsofa.icu = rep(dd.noil6.3$limits$mean.modsofa.icu[2], 10),
-#                          icudays.sevseptic.s = rep(dd.noil6.3$limits$icudays.sevseptic.s[2], 10),
-#                          del.s.imp = rep(dd.noil6.3$limits$del.s.imp[2], 10),
-#                          coma.s.imp = rep(dd.noil6.3$limits$coma.s.imp[2], 10),
-#                          vent.los.tot.s = rep(dd.noil6.3$limits$vent.los.tot.s[2], 10))
-# 
-# survest.ltmort.noil6.3 <- survest(ltmort.noil6.3, newdata = survest.df, times = 90)
-# with(survest.ltmort.noil6.3, cbind(surv, lower, upper))
-# Predict(ltmort.noil6.3, nutric.noil6 = NA, time = 90)[,c('yhat', 'lower', 'upper')]
-# 
-# survest.ltmort.noil6.12 <- survest(ltmort.noil6.12, newdata = survest.df[1,], times = c(90, 180, 350))
-# 
-# survest(ltmort.noil6.12, newdata = survest.df[1,], times = c(365))
-
-@
-
-We see no meaningful association between NUTRIC score at baseline and mortality at either 3 or 12
-months after hospital discharge.
-
-Table \ref{table:ltmortresults} shows p-values for the total association of NUTRIC score with
-long-term mortality and hazard ratios comparing the 75th to the 25th percentiles of our population's
-NUTRIC scores. Figure \ref{fig:printltmortmodels} shows hazard ratios comparing each NUTRIC value to
-\Sexpr{nutric.ref}, our cohort of survivors' median.
-  
-<<printltmortmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Mortality at 3 \\& 12 Months'>>=
-latex(ltmort.nutric.table[,c('time.f', 'comp.str.il6', 'peci.str.il6', 'pval.str.il6',
-                             'peci.str.noil6', 'pval.str.noil6')],
-      file = '',
-      where = '!h',
-      caption = 'NUTRIC Score at ICU Admission vs Mortality at 3 \\& 12 Months',
-      caption.lot = 'NUTRIC vs 3- and 12-Month Mortality',
-      label = 'table:ltmortresults',
-      rowname = NULL,
-      colheads = c('Followup Time', 'NUTRIC Score Comparison*',
-                   rep(c('HR (95\\% CI)', 'P-Value'), 2)),
-      col.just = c('l', 'c', rep('r', 4)),
-      cgroup = c('', 'NUTRIC with IL-6', 'NUTRIC without IL-6'),
-      n.cgroup = c(2, 2, 2),
-      insert.bottom = nutric.note)
-
-ltmort.nutric.plot
 
 @
 
