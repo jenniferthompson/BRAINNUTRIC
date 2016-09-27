@@ -40,9 +40,11 @@ library(zoo) ## for na.locf
 if(Sys.info()['sysname'] == 'Darwin'){
   load('/Volumes/thomps23/ICUDelirium/BRAINICU/braindata.Rdata')
   source('/Volumes/thomps23/ICUDelirium/timevarying_data.r')
+  source(file.path('/', 'Volumes', 'thomps23', 'R', 'multiplot.r'))
 } else{
   load('/home/thomps23/ICUDelirium/BRAINICU/braindata.Rdata')
   source('/home/thomps23/ICUDelirium/timevarying_data.r')
+  source(file.path('/', 'home', 'thomps23', 'R', 'multiplot.r'))
 }
 
 ## Method to use in pool.compare() for getting p-values from imputed negative binomial models
@@ -413,25 +415,26 @@ We imputed this variable using single imputation based on the day before and the
 
 All models include the following covariates, with changes as noted for mortality outcomes; due to
 the potential for immortal time bias, we will use time-varying Cox models which incorporate daily
-variables rather than summary variables. Most continuous covariates (noted below) were allowed to
-have a nonlinear relationship with the outcomes using restricted cubic splines; other continuous
-covariates were forced to have a linear relationship, due both to limited sample size and to lack of
-variability in those covariates (eg, over 75\% of baseline ADL values were 0).
+variables rather than summary variables. In discharge location and long-term outcome models, most continuous covariates (noted below) were allowed to have a nonlinear relationship with the outcomes
+using restricted cubic splines; other continuous covariates were forced to have a linear
+relationship, due both to limited sample size and to lack of variability in those covariates (eg,
+over 75\% of baseline ADL values were 0). In mortality models, due to a lack of events especially
+for in-hospital mortality as well as lack of variability in some cases, nearly all continuous covariates were forced to be linear in order to conserve degrees of freedom, with exceptions of daily SOFA, BMI, and NUTRIC scores.
 
 \begin{itemize}
 \item Baseline characteristics
   \begin{itemize}
-  \item Years of education (nonlinear)
+  \item Years of education (nonlinear, except mortality models)
   \item CSHA frailty score
   \item Sex
-  \item BMI (nonlinear)
+  \item BMI (nonlinear, all models)
   \item IQCODE
   \item Katz ADL
-  \item FAQ (nonlinear)
+  \item FAQ (nonlinear, except mortality models)
   \end{itemize}
 \item In-hospital characteristics
   \begin{itemize}
-  \item Mean modified daily SOFA in ICU (nonlinear) (\emph{mortality: daily modified SOFA})
+  \item Mean modified daily SOFA in ICU (nonlinear, all models) (\emph{mortality: daily modified SOFA})
   \item Duration of severe sepsis (nonlinear) (\emph{mortality: daily severe sepsis})
   \item Duration of delirium (nonlinear) (\emph{mortality: daily mental status})
   \item Duration of coma (nonlinear) (\emph{mortality: daily mental status})
@@ -1292,7 +1295,7 @@ included and excluded from these models.
 
 <<mortmodelsetup>>=
 ## Set model formulas for use in all models
-mort.covar.rh <- 'rcs(edu, 3) + frailty.num + sex.pp + rcs(bmi, 3) + iqcode.score.e + adl.e + rcs(faq.e, 3) + rcs(daily.sofa.mod.locf, 3) + sevsepsis.imp + mental.stat.imp + on.vent.l24'
+mort.covar.rh <- 'edu + frailty.num + sex.pp + rcs(bmi, 3) + iqcode.score.e + adl.e + faq.e + rcs(daily.sofa.mod.locf, 3) + sevsepsis.imp + mental.stat.imp + on.vent.l24'
 
 mort.il6.rh <- paste(mort.covar.rh, '+ rcs(nutric.il6, 3)')
 mort.noil6.rh <- paste(mort.covar.rh, '+ rcs(nutric.noil6, 3)')
@@ -1470,11 +1473,11 @@ Results follow for the associations between NUTRIC scores and mortality at the f
 For all three endpoints, we see an association such that the higher NUTRIC scores are more strongly
 related to a higher risk of death. These associations are marginally significant for the full NUTRIC
 scores, and less pronounced for modified NUTRIC scores. This could be due to either the influence of
-IL-6 (the difference between these two scores), or to the difference between the patients included in the two cohorts.
+IL-6 (the difference between these two scores), or to the difference between the patients included in the two cohorts. Figure \ref{fig:printmortexplore} presents some exploratory analyses which attempted to describe the latter; no extremely clear difference jumps out, other than the lack of modified NUTRIC scores of 0 in the \Sexpr{nrow(subset(brain.oneobs, cohort.allpts & !miss.base.covar & !no.days.mental & is.na(nutric.il6)))} patients excluded from analyses using the full NUTRIC. But since only \Sexpr{sum(brain.oneobs$nutric.noil6 == 0, na.rm = TRUE)} patients had a modified NUTRIC score of 0, this could just be due to chance.
 
 Table \ref{table:mortresults} shows p-values for the total association of NUTRIC score with
 mortality and hazard ratios comparing the 75th to the 25th percentiles of our population's NUTRIC scores. Figure \ref{fig:printmortmodels} shows hazard ratios comparing each NUTRIC value to \Sexpr{nutric.ref}, our complete case cohort's median and thus representing an ``average"
-patient. Figure \ref{fig:printinhospexplore} shows raw (unadjusted) times to in-hospital death or discharge by full NUTRIC score at ICU admission.
+patient.
   
 <<printmortmodels, results = 'asis', fig.cap = 'NUTRIC Score at ICU Admission vs Mortality'>>=
 latex(mort.nutric.table,
@@ -1494,20 +1497,65 @@ mort.nutric.plot
 
 @
 
-%' <<printinhospexplore, results = 'asis', fig.cap = 'Unadjusted Time to In-Hospital Death or Discharge by Modified NUTRIC', fig.height = 2.7>>=
-%' ggplot(data = subset(brain.oneobs, cohort.mort.il6),
-%'        aes(x = nutric.il6, y = days.deathlast.inhosp.s)) +
-%'   geom_boxplot(aes(group = nutric.il6), colour = 'grey50', outlier.shape = NA, fill = NA) +
-%'   geom_point(aes(colour = died.inhosp.s),
-%'              position = position_jitter(width = 0.5), alpha = 0.5, size = 0.75) +
-%'   scale_x_continuous(breaks = 0:10) +
-%'   scale_colour_discrete(labels = c('Discharged', 'Died')) +
-%'   theme(#legend.position = 'bottom', legend.direction = 'horizontal',
-%'         legend.title = element_text(size = 6), legend.text = element_text(size = 6),
-%'         axis.title = element_text(size = 7),
-%'         axis.text = element_text(size = 7))
-%' 
-%' @
+<<printmortexplore, results = 'asis', fig.cap = 'Exploratory Analyses: Patients Included vs Excluded from Mortality Models Using Full NUTRIC Scores'>>=
+explore.mort.data <- brain.oneobs %>%
+  filter(cohort.mort) %>%
+  dplyr::select(id, cohort.mort.il6, nutric.noil6,
+                died.inhosp.s, days.deathlast.inhosp.s, died.brain.90, days.deathlast.90,
+                died.brain.365, days.deathlast.365) %>%
+  gather(key = deathvar, value = deathvalue, died.inhosp.s:days.deathlast.365) %>%
+  mutate(deathvar = gsub('\\.s$|\\.deathlast|\\.brain', '', deathvar)) %>%
+  separate(deathvar, into = c('deathvar', 'timept')) %>%
+  spread(key = deathvar, deathvalue) %>%
+  mutate(died = gsub(' .+$', '', died),
+         days = as.numeric(days),
+         cohort.f = factor(cohort.mort.il6,
+                           labels = c('Excluded from\nfull NUTRIC', 'Included in\nboth models')),
+         timept.f = factor(ifelse(timept == 'inhosp', 1,
+                           ifelse(timept == '90', 2, 3)),
+                           levels = 1:3, labels = c('In-Hospital', '90 Days', '365 Days')))
+
+boxplot.daysdeath <- ggplot(data = explore.mort.data, aes(x = cohort.mort.il6, y = days)) +
+  facet_wrap(~ timept.f, nrow = 1, scales = 'free_y') +
+  geom_boxplot(colour = 'grey80', outlier.shape = NA, fill = NA) +
+  geom_point(aes(colour = died),
+             position = position_jitter(width = 0.5, height = 0.1), alpha = 0.3, size = 0.75) +
+  scale_colour_discrete(name = 'Died during period') +
+  scale_x_discrete(name = 'Included in full NUTRIC mortality models') +
+  scale_y_continuous(name = 'Days to death or censoring') +
+  theme(legend.title = element_text(size = 8),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.3, 'cm'),
+        legend.position = 'bottom', legend.direction = 'horizontal',
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 7))
+
+boxplot.modnutric <- ggplot(data = brain.oneobs,
+                            aes(x = cohort.mort.il6, y = nutric.noil6, colour = cohort.mort.il6)) +
+  geom_boxplot(aes(fill = cohort.mort.il6), alpha = 0.3) +
+  geom_point(position = position_jitter(width = 0.5, height = 0.1), alpha = 0.3) +
+  scale_x_discrete(name = 'Included in full NUTRIC\nmortality models') +
+  scale_y_continuous(breaks = 0:9, name = 'Modified NUTRIC') +
+  scale_colour_manual(values = c('#BA6E00', '#003D79'), guide = FALSE) +
+  scale_fill_manual(values = c('#BA6E00', '#003D79'), guide = FALSE) +
+  theme(axis.title = element_text(size = 8),
+        axis.text = element_text(size = 7))
+
+# ggplot(data = subset(brain.oneobs, cohort.mort.il6),
+#        aes(x = nutric.il6, y = days.deathlast.inhosp.s)) +
+#   geom_boxplot(aes(group = nutric.il6), colour = 'grey50', outlier.shape = NA, fill = NA) +
+#   geom_point(aes(colour = died.inhosp.s),
+#              position = position_jitter(width = 0.5), alpha = 0.5, size = 0.75) +
+#   scale_x_continuous(breaks = 0:10) +
+#   scale_colour_discrete(labels = c('Discharged', 'Died')) +
+#   theme(#legend.position = 'bottom', legend.direction = 'horizontal',
+#         legend.title = element_text(size = 6), legend.text = element_text(size = 6),
+#         axis.title = element_text(size = 7),
+#         axis.text = element_text(size = 7))
+
+multiplot(boxplot.daysdeath, boxplot.modnutric, layout = matrix(c(1, 1, 2), nrow = 1))
+
+@
 
 \clearpage
 \section{NUTRIC vs Hospital Discharge Location}
@@ -1605,7 +1653,7 @@ adl.nutric.table <- results.table('adl')
 
 @
 
-There is a significant association between NUTRIC scores at baseline and ADL scores at 3 months;
+There is a potential association between NUTRIC scores at baseline and ADL scores at 3 months;
 this association is nonlinear, so please see Figure \ref{fig:printadlmodels}, which presents adjusted Katz ADL scores for an otherwise ``average" patient with each NUTRIC value, for a full
 picture. Generally, lower NUTRIC scores don't have much of a relationship with ADL scores; higher
 NUTRIC scores are associated with slightly higher ADL scores at 3 months. By 12 months, however,
